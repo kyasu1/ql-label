@@ -1,11 +1,18 @@
 [package]
-name = "rust-ptouch-usb"
+name = "ptouch"
 version = "0.1.0"
-authors = ["yako"]
+authors = ["Yasuyuki Komatsubara <kyasuyako@gmail.com"]
+description = "Rust P-Touch Printer Driver"
+license = "MIT"
+homepage = "https://github.com/kyasu1/ptouch"
+repository = "https://github.com/kyasu1/ptouch.git"
+readme = "README.md"
+keywords = ["usb", "libusb", "rusb", "ptouch" ]
 edition = "2018"
+
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 rusb = "0.6.4"
-
+thiserror = "*"

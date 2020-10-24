@@ -1,3 +1,11 @@
+## 目的
+
+This module supports API for priting on multiple P-Touch seriese printers connected by USB ports.
+
+
+Create a new printer by specifying the model and the serial number 
+
+
 ```
 /home/yako/Projects/node-ptouch-usb/node_modules/usb/usb.js:38
 	this.__open()
