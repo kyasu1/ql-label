@@ -20,6 +20,12 @@ pub fn list_printers() -> Vec<Printer> {
 }
 
 // ///
-pub fn cancel_printing() -> Result<(), error::Error> {
+pub fn cancel_printing() -> Result<(), Error> {
+    unimplemented!()
+}
+
+///
+/// 
+pub fn print() -> Result<(), Error> {
     unimplemented!()
 }

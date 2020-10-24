@@ -1,5 +1,5 @@
 use std::time::Duration;
-
+use log::{error, debug, info, warn};
 use rusb::{Context, Device, DeviceDescriptor, DeviceHandle, Direction, TransferType, UsbContext};
 
 use crate::error::Error;
@@ -46,6 +46,10 @@ impl Printer {
                         None => return Err(Error::MissingEndpoint),
                     };
 
+                    // QL-800では`has_kernel_driver`が`true`となる
+                    // QL-820NWBでは`has_kernel_driver`が`false`となる
+                    // `has_kernel_driver`が`true`の場合に、カーネルドライバーをデタッチしないとエラーとなる
+                    //
                     handle.set_auto_detach_kernel_driver(true)?;
                     let has_kernel_driver = match handle.kernel_driver_active(0) {
                         Ok(true) => {
@@ -54,7 +58,7 @@ impl Printer {
                         }
                         _ => false,
                     };             
-                    println!(" - kernel driver? {}", has_kernel_driver);
+                    info!(" Kernel driver support is {}", has_kernel_driver);
                     handle.set_active_configuration(1)?;
                     handle.claim_interface(0)?;
                     handle.set_alternate_setting(0, 0)?;
@@ -154,7 +158,7 @@ impl Printer {
         let result = self
             .handle
             .write_bulk(self.endpoint_out.address, &buf, timeout);
-        println!("write: {:?}", result);
+        debug!("write: {:?}", result);
         match result {
             Ok(n) => {
                 if n == buf.len() {
@@ -186,12 +190,17 @@ impl Printer {
         }
         Err(Error::ReadStatusTimeout)
     }
+
+    /// Initialize printer
+    /// 
     pub fn initialize(&self) -> Result<(), Error> {
         self.write([0x00; 400].to_vec())?;
         self.write([0x1b, 0x40].to_vec())?;
         Ok(())
     }
 
+    /// Request printer status. call this function once before printing.
+    /// 
     pub fn request_status(&self) -> Result<usize, Error> {
         self.write([0x1b, 0x69, 0x53].to_vec())
     }
