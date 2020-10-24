@@ -27,9 +27,11 @@ SUBSYSTEMS=="usb", ATTRS{idVendor}=="04f9", ATTRS{idProduct}=="209b|209c|209d", 
 ```
 
 ```
-$ sudo udevadm trigger
-$ sudo udevadm control --reload-rules
+sudo udevadm trigger
+sudo udevadm control --reload-rules
 ```
 
 
 https://static.dev.sifive.com/dev-tools/FreedomStudio/2019.08/freedom-studio-manual-4.7.2-2019-08-1.pdf
+
+https://gill.net.in/posts/reverse-engineering-a-usb-device-with-rust/

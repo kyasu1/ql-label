@@ -20,9 +20,12 @@ pub struct Printer {
 
 impl Printer {
     pub fn new(model: Model, serial: String) -> Result<Self, Error> {
+        rusb::set_log_level(rusb::LogLevel::Debug);
         match Context::new() {
             Ok(mut context) => match Self::open_device(&mut context, 0x04F9, model.pid(), serial) {
-                Some((mut device, device_desc, handle)) => {
+                Some((mut device, device_desc, mut handle)) => {
+                    handle.reset()?;
+
                     let endpoint_in = match Self::find_endpoint(
                         &mut device,
                         &device_desc,
@@ -42,6 +45,19 @@ impl Printer {
                         Some(endpoint) => endpoint,
                         None => return Err(Error::MissingEndpoint),
                     };
+
+                    handle.set_auto_detach_kernel_driver(true)?;
+                    let has_kernel_driver = match handle.kernel_driver_active(0) {
+                        Ok(true) => {
+                            handle.detach_kernel_driver(0).ok();
+                            true
+                        }
+                        _ => false,
+                    };             
+                    println!(" - kernel driver? {}", has_kernel_driver);
+                    handle.set_active_configuration(1)?;
+                    handle.claim_interface(0)?;
+                    handle.set_alternate_setting(0, 0)?;
 
                     Ok(Printer {
                         handle: Box::new(handle),

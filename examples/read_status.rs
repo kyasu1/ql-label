@@ -16,7 +16,7 @@ fn main() {
     let pid: u16 = FromStr::from_str(args[2].as_ref()).unwrap(); // 8349
     let serial: String = FromStr::from_str(args[3].as_ref()).unwrap();
 
-    match Printer::new(Model::QL820NWB, "000J9Z880381".to_string()) {
+    match Printer::new(Model::QL800, serial.to_string()) {
         Ok(printer) => {
             printer.initialize();
             printer.request_status();
