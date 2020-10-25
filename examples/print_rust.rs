@@ -10,24 +10,26 @@ fn main() {
     let file = "examples/sample2.png";
 
     let im: image::DynamicImage = image::open(file).unwrap();
+    let (_, height) = im.dimensions();
 
-    const PINS: u32 = 720;
-    let left_pins = 0; //12;
-    let width = PINS - left_pins;
-    let length = 480;
-    let offset_x = 12;
 
-    let mut gray = im.grayscale();
+    let width = 720;
+    let length = height; // 480;
+
+    let gray = im.grayscale();
     let mut buffer = image::DynamicImage::new_luma8(width, length);
     buffer.invert();
     buffer.copy_from(&gray, 0, 0).unwrap();
-
     buffer.invert();
+    let bytes = buffer.to_bytes();
 
-    buffer.save("examples/out.png").unwrap();
+    println!("{:?}", buffer.dimensions());
 
-    gray.invert();
-    let bytes = gray.to_bytes();
+    // buffer.save("examples/out.png").unwrap();
+
+    // println!("{:?}", gray.dimensions());
+    // gray.invert();
+    // let bytes = gray.to_bytes();
 
     let mut bw: Vec<Vec<u8>> = Vec::new();
 
@@ -63,7 +65,6 @@ fn main() {
     if true {
         match Printer::new(Model::QL800, "000G0Z714634".to_string()) {
             Ok(printer) => {
-                // printer.initialize();
                 printer.request_status().unwrap();
                 let result = printer.read_status();
                 println!("status before: {:?}", result);

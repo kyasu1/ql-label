@@ -240,8 +240,7 @@ impl Printer {
         // ESC i z 印刷情報司令
         // buf.append(&mut [0x1B, 0x69, 0x7A, 0x8E, 0x0A, 0x3E, 0x64].to_vec());
         buf.append(&mut [0x1B, 0x69, 0x7A, 0x86, 0x0A, 0x3E, 0x00].to_vec());
-        let divider = if config.high_resolution { 1 } else { 1 };
-        let len = (image.len() as u32 / divider).to_le_bytes();
+        let len = (image.len() as u32).to_le_bytes();
         buf.append(&mut len.to_vec());
         buf.append(&mut [0x00, 0x00].to_vec());
 
@@ -517,7 +516,7 @@ impl Config {
         let mut various_mode: u8 = 0b00000000;
         let mut auto_cut_num: u8 = 1;
 
-        if let AutoCut::Enabled(n) =self.auto_cut {
+        if let AutoCut::Enabled(n) = self.auto_cut {
             auto_cut_num = n;
             various_mode = various_mode | 0b01000000;
         }
@@ -537,7 +536,7 @@ impl Config {
 
         if self.high_resolution == true {
             expanded_mode = expanded_mode | 0b01000000;
-        }        
+        }
 
         buf.append(&mut [0x1B, 0x69, 0x4B, expanded_mode].to_vec()); // ESC i K : Set expanded mode
     }
