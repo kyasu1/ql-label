@@ -240,7 +240,8 @@ impl Printer {
         // ESC i z 印刷情報司令
         // buf.append(&mut [0x1B, 0x69, 0x7A, 0x8E, 0x0A, 0x3E, 0x64].to_vec());
         buf.append(&mut [0x1B, 0x69, 0x7A, 0x86, 0x0A, 0x3E, 0x00].to_vec());
-        let len = (image.len() as u32).to_le_bytes();
+        let divider = if config.high_resolution { 1 } else { 1 };
+        let len = (image.len() as u32 / divider).to_le_bytes();
         buf.append(&mut len.to_vec());
         buf.append(&mut [0x00, 0x00].to_vec());
 
@@ -260,7 +261,11 @@ impl Printer {
     /// Request printer status. call this function once before printing.
     ///
     pub fn request_status(&self) -> Result<usize, Error> {
-        self.write([0x1b, 0x69, 0x53].to_vec())
+        let mut buf: Vec<u8> = Vec::new();
+        buf.append(&mut [0x00; 400].to_vec());
+        buf.append(&mut [0x1B, 0x40].to_vec());
+        buf.append(&mut [0x1b, 0x69, 0x53].to_vec());
+        self.write(buf)
     }
 
     /// Specify margin amount (feed amount)
@@ -482,7 +487,7 @@ impl Config {
             auto_cut: AutoCut::Enabled(1),
             two_colors: false,
             cut_at_end: true,
-            high_resolution: true,
+            high_resolution: false,
         }
     }
 
@@ -496,6 +501,13 @@ impl Config {
     pub fn disable_auto_cut(self) -> Self {
         Config {
             auto_cut: AutoCut::Disabled,
+            ..self
+        }
+    }
+
+    pub fn change_resolution(self, high: bool) -> Self {
+        Config {
+            high_resolution: high,
             ..self
         }
     }
