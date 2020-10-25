@@ -1,6 +1,8 @@
 pub use crate::{
     error::{Error, PrinterError},
-    printer::{Model, Printer, Status},
+    printer::{Printer, Status, Config},
+    model::{Model},
+    media::{Media},
 };
 
 //
@@ -13,6 +15,8 @@ pub use crate::{
 
 mod error;
 mod printer;
+mod media;
+mod model;
 
 /// This returns list of connected Brother P-Touch series printers.
 pub fn list_printers() -> Vec<Printer> {

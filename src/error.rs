@@ -61,7 +61,7 @@ pub enum PrinterError {
 }
 
 impl PrinterError {
-    fn from_buf(buf: [u8; 32]) -> Self {
+    pub fn from_buf(buf: [u8; 32]) -> Self {
         match buf[8] {
             0x01 => Self::NoMedia,
             0x02 => Self::EndOfMedia,

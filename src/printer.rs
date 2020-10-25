@@ -1,8 +1,15 @@
-use std::time::Duration;
-use log::{error, debug, info, warn};
+use log::{debug, error, info, warn};
 use rusb::{Context, Device, DeviceDescriptor, DeviceHandle, Direction, TransferType, UsbContext};
+use std::time::Duration;
 
-use crate::error::Error;
+use crate::{
+    error::{Error, PrinterError},
+    media::Media,
+    model::Model,
+};
+
+#[macro_use]
+use bitflags::bitflags;
 
 #[derive(Debug, Clone, Copy)]
 struct Endpoint {
@@ -16,6 +23,16 @@ pub struct Printer {
     handle: Box<DeviceHandle<Context>>,
     endpoint_out: Endpoint,
     endpoint_in: Endpoint,
+}
+
+struct PrinterInner {
+    handle: Box<DeviceHandle<Context>>,
+    endpoint_out: Endpoint,
+    endpoint_in: Endpoint,
+}
+
+pub trait Printable: Clone + Sized {
+    fn cancel() -> Result<(), Error>;
 }
 
 impl Printer {
@@ -57,7 +74,7 @@ impl Printer {
                             true
                         }
                         _ => false,
-                    };             
+                    };
                     info!(" Kernel driver support is {}", has_kernel_driver);
                     handle.set_active_configuration(1)?;
                     handle.claim_interface(0)?;
@@ -158,12 +175,12 @@ impl Printer {
         let result = self
             .handle
             .write_bulk(self.endpoint_out.address, &buf, timeout);
-        debug!("write: {:?}", result);
         match result {
             Ok(n) => {
                 if n == buf.len() {
                     Ok(n)
                 } else {
+                    println!("write error: {:?}", result);
                     Err(Error::InvalidResponse(n))
                 }
             }
@@ -180,8 +197,15 @@ impl Printer {
                 .handle
                 .read_bulk(self.endpoint_in.address, &mut buf, timeout)
             {
-                Ok(32) => return Ok(Status::from_buf(buf)),
+                // TODO: Check the first 4bytes match to [0x80, 0x20, 0x42, 0x34]
+                Ok(32) => {
+                    println!("raw staus code");
+                    println!("{:x?}", buf);
+                    return Ok(Status::from_buf(buf));
+                }
                 Ok(_) => {
+                    println!("raw staus code: someting is wrong");
+                    println!("{:0x?}", buf);
                     counter = counter - 1;
                     continue;
                 }
@@ -191,16 +215,50 @@ impl Printer {
         Err(Error::ReadStatusTimeout)
     }
 
+    // pub print_continuous(image: Vec<u8>) -> Result<(), Error> {
+    //     let mut buffer: Vec<u8>;
+
+    //     self.initialize();
+    //     self.request_status();
+    //     self.set_raster_mode();
+    // }
     /// Initialize printer
-    /// 
+    ///
     pub fn initialize(&self) -> Result<(), Error> {
         self.write([0x00; 400].to_vec())?;
         self.write([0x1b, 0x40].to_vec())?;
         Ok(())
     }
 
+    pub fn print_label(&self, image: Vec<Vec<u8>>, config: Config) -> Result<usize, Error> {
+        let mut buf: Vec<u8> = Vec::new();
+        buf.append(&mut [0x00; 400].to_vec());
+        buf.append(&mut [0x1B, 0x40].to_vec());
+        buf.append(&mut [0x1B, 0x69, 0x61, 0x01].to_vec()); // Set raster command mode
+        buf.append(&mut [0x1B, 0x69, 0x21, 0x00].to_vec()); // Set auto status notificatoin mode
+
+        // ESC i z 印刷情報司令
+        // buf.append(&mut [0x1B, 0x69, 0x7A, 0x8E, 0x0A, 0x3E, 0x64].to_vec());
+        buf.append(&mut [0x1B, 0x69, 0x7A, 0x86, 0x0A, 0x3E, 0x00].to_vec());
+        let len = (image.len() as u32).to_le_bytes();
+        buf.append(&mut len.to_vec());
+        buf.append(&mut [0x00, 0x00].to_vec());
+
+        // apply config values
+        config.build(&mut buf);
+
+        buf.append(&mut [0x1B, 0x69, 0x64, 0x23, 0x00].to_vec()); // Set margin / feed amount to 3mm
+        buf.append(&mut [0x4D, 0x00].to_vec());
+        for mut row in image {
+            //            buf.append(&mut [0x67, 0x00, row.len() as u8].to_vec());
+            buf.append(&mut [0x67, 0x00, 90].to_vec()); // 無圧縮の場合はn=90とする
+            buf.append(&mut row);
+        }
+        buf.append(&mut [0x1A].to_vec()); // Control-Z : Print then Eject
+        self.write(buf)
+    }
     /// Request printer status. call this function once before printing.
-    /// 
+    ///
     pub fn request_status(&self) -> Result<usize, Error> {
         self.write([0x1b, 0x69, 0x53].to_vec())
     }
@@ -254,7 +312,7 @@ impl Printer {
     ///
     /// TODO: support compression mode
     pub fn transfer_raster(&self, buf: Vec<u8>) -> Result<(), Error> {
-        self.write([0x67, 0x00, 0x90].to_vec())?;
+        self.write([0x67, 0x00, 0x5A].to_vec())?;
         self.write(buf)?;
         Ok(())
     }
@@ -295,48 +353,24 @@ impl Printer {
     pub fn print_information(&self) -> Result<(), Error> {
         Ok(())
     }
-}
 
-// Model
-#[derive(Debug)]
-pub enum Model {
-    QL800,
-    QL810W,
-    QL820NWB,
-}
+    fn set_autocut(mut buf: Vec<u8>, enabled: bool) {
+        let byte: u8 = if enabled { 0b0100_0000 } else { 0b0000_0000 };
 
-impl Model {
-    fn from_code(code: u8) -> Self {
-        match code {
-            0x38 => (Self::QL800),
-            0x39 => (Self::QL810W),
-            0x41 => (Self::QL820NWB),
-            _ => panic!("Unknown model code {}", code),
-        }
-    }
-
-    fn pid(&self) -> u16 {
-        match self {
-            Self::QL800 => 0x209b,
-            Self::QL810W => 0x209c,
-            Self::QL820NWB => 0x209d,
-        }
+        buf.append(&mut [0x1B, 0x69, 0x4B, byte].to_vec())
     }
 }
 
 ///
+/// Status received from the printer encoded to Rust friendly type.
 ///
-
 #[derive(Debug)]
 pub struct Status {
     model: Model,
-    error1: u8,
-    error2: u8,
-    media_width: u8,
-    media_type: u8,
+    error: PrinterError,
+    media: Option<Media>,
     mode: u8,
-    media_length: u8,
-    status_type: u8,
+    status_type: StatusType,
     phase: Phase,
     notification: Notification,
 }
@@ -345,19 +379,42 @@ impl Status {
     fn from_buf(buf: [u8; 32]) -> Self {
         Status {
             model: Model::from_code(buf[4]),
-            error1: buf[8],
-            error2: buf[9],
-            media_width: buf[10],
-            media_type: buf[11],
+            error: PrinterError::from_buf(buf),
+            media: Media::from_buf(buf),
             mode: buf[15],
-            media_length: buf[17],
-            status_type: buf[18],
+            status_type: StatusType::from_code(buf[18]),
             phase: Phase::from_buf(buf),
             notification: Notification::from_code(buf[22]),
         }
     }
 }
 
+// StatusType
+
+#[derive(Debug)]
+enum StatusType {
+    ReplyToRequest,
+    Completed,
+    Error,
+    Offline,
+    Notification,
+    PhaseChange,
+    Unknown,
+}
+
+impl StatusType {
+    fn from_code(code: u8) -> StatusType {
+        match code {
+            0x00 => Self::ReplyToRequest,
+            0x01 => Self::Completed,
+            0x02 => Self::Error,
+            0x04 => Self::Offline,
+            0x05 => Self::Notification,
+            0x06 => Self::PhaseChange,
+            _ => Self::Unknown,
+        }
+    }
+}
 // Phase
 
 #[derive(Debug)]
@@ -394,5 +451,82 @@ impl Notification {
             0x04 => Self::CoolingFinished,
             _ => Self::NotAvailable,
         }
+    }
+}
+
+//
+
+bitflags! {
+    struct ExtendedMode: u8 {
+        const ColorMode = 0b00000001;
+        const CutAtEnd = 0b00001000;
+        const Resolution = 0b01000000;
+    }
+}
+
+enum AutoCut {
+    Enabled(u8),
+    Disabled,
+}
+
+pub struct Config {
+    auto_cut: AutoCut,
+    two_colors: bool,
+    cut_at_end: bool,
+    high_resolution: bool,
+}
+
+impl Config {
+    pub fn new() -> Config {
+        Config {
+            auto_cut: AutoCut::Enabled(1),
+            two_colors: false,
+            cut_at_end: true,
+            high_resolution: true,
+        }
+    }
+
+    pub fn enable_auto_cut(self, size: u8) -> Self {
+        Config {
+            auto_cut: AutoCut::Enabled(size),
+            ..self
+        }
+    }
+
+    pub fn disable_auto_cut(self) -> Self {
+        Config {
+            auto_cut: AutoCut::Disabled,
+            ..self
+        }
+    }
+
+    fn build(self, buf: &mut std::vec::Vec<u8>) {
+        // set auto cut
+        let mut various_mode: u8 = 0b00000000;
+        let mut auto_cut_num: u8 = 1;
+
+        if let AutoCut::Enabled(n) =self.auto_cut {
+            auto_cut_num = n;
+            various_mode = various_mode | 0b01000000;
+        }
+        buf.append(&mut [0x1B, 0x69, 0x41, auto_cut_num].to_vec()); // ESC i A : Set auto cut number
+        buf.append(&mut [0x1B, 0x69, 0x4D, various_mode].to_vec()); // ESC i M : Set various mode
+
+        // set expanded mode
+        let mut expanded_mode: u8 = 0b00000000;
+
+        if self.two_colors == true {
+            expanded_mode = expanded_mode | 0b00000001;
+        }
+
+        if self.cut_at_end == true {
+            expanded_mode = expanded_mode | 0b00001000;
+        };
+
+        if self.high_resolution == true {
+            expanded_mode = expanded_mode | 0b01000000;
+        }        
+
+        buf.append(&mut [0x1B, 0x69, 0x4B, expanded_mode].to_vec()); // ESC i K : Set expanded mode
     }
 }
