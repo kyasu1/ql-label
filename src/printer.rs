@@ -191,26 +191,31 @@ impl Printer {
     pub fn read_status(&self) -> Result<Status, Error> {
         let timeout = Duration::from_secs(1);
         let mut buf: [u8; 32] = [0x00; 32];
-        let mut counter: u8 = 10;
-        while counter > 0 {
+        let mut counter = 0;
+
+        while counter < 10 {
             match self
                 .handle
                 .read_bulk(self.endpoint_in.address, &mut buf, timeout)
             {
                 // TODO: Check the first 4bytes match to [0x80, 0x20, 0x42, 0x34]
+                // TODO: Check the error status
                 Ok(32) => {
-                    println!("raw staus code");
-                    println!("{:x?}", buf);
-                    return Ok(Status::from_buf(buf));
+                    let status = Status::from_buf(buf);
+                    debug!("Raw status code: {:X?}", buf);
+                    debug!("Parsed Status struct: {:?}", status);
+                    if status.phase == Phase::Receiving {
+                        return Ok(status);
+                    } else {
+                        std::thread::sleep(std::time::Duration::from_secs(1));
+                    }
                 }
                 Ok(_) => {
-                    println!("raw staus code: someting is wrong");
-                    println!("{:0x?}", buf);
-                    counter = counter - 1;
-                    continue;
+                    std::thread::sleep(std::time::Duration::from_secs(1));
                 }
                 Err(e) => return Err(Error::UsbError(e)),
-            }
+            };
+            counter = counter + 1;
         }
         Err(Error::ReadStatusTimeout)
     }
@@ -228,31 +233,77 @@ impl Printer {
         self.config.media.set_media(buf, true);
     }
 
+    fn to_bw(width: u32, length: u32, bytes: Vec<u8>) -> Vec<Vec<u8>> {
+        // convert to black and white data
+        // this works fine for monochrome image in original
+        // TODO: Add support for a dithering algorithm to print phots
+        //
+        let mut bw: Vec<Vec<u8>> = Vec::new();
+        for y in 0..length {
+            let mut buf: Vec<u8> = Vec::new();
+            for x in 0..(width / 8) {
+                let index = (1 + y) * width - (1 + x) * 8;
+                let mut tmp: u8 = 0x00;
+                for i in 0..8 {
+                    let pixel = bytes[(index + i) as usize];
+                    let value: u8 = if pixel > 80 { 1 } else { 0 };
+                    tmp = tmp | (value << i);
+                }
+                buf.push(tmp);
+            }
+            /*
+            let x = width / 8;
+            let res = width % 8;
+            if res > 0 {
+                let index = (width - 8 - x * 8 + y * width) as usize;
+                let mut tmp: u8 = 0x00;
+                for i in 0..res {
+                    tmp = tmp | (bytes[index + i as usize] as u8 & 0xF0u8) >> (7 - i);
+                }
+                buf.push(tmp);
+            }
+            */
+            bw.push(buf);
+        }
+        bw
+    }
+
     pub fn cancel(&self) -> Result<(), Error> {
         let buf = self.initialize();
         self.write(buf)?;
         Ok(())
     }
 
-    pub fn print_label(&self, images: Vec<Vec<Vec<u8>>>) -> Result<(), Error> {
+    pub fn print(&self, images: Vec<Vec<Vec<u8>>>) -> Result<(), Error> {
+        self.request_status()?;
+
+        match self.read_status() {
+            Ok(status) => {
+                status.check_media(self.config.media)?;
+                self.print_label(images)?;
+                Ok(())
+            }
+            Err(err) => Err(err),
+        }
+    }
+
+    fn print_label(&self, images: Vec<Vec<Vec<u8>>>) -> Result<(), Error> {
         let mut preamble: Vec<u8> = self.initialize();
         preamble.append(&mut [0x1B, 0x69, 0x61, 0x01].to_vec()); // Set raster command mode
         preamble.append(&mut [0x1B, 0x69, 0x21, 0x00].to_vec()); // Set auto status notificatoin mode
-        preamble.append(&mut [0x4D, 0x00].to_vec()); // Set compress mode to NO compression
+        preamble.append(&mut [0x4D, 0x00].to_vec()); // Set to no compression mode
 
-        // apply config values
+        // Apply config values
         match self.config.clone().build() {
             Ok(mut buf) => preamble.append(&mut buf),
             Err(err) => return Err(err),
         }
 
         let mut start_flag: bool = true;
-
         let mut iter = images.into_iter().peekable();
-
-        let mut buf: Vec<u8> = Vec::new();
-
         loop {
+            let mut buf: Vec<u8> = Vec::new();
+
             match iter.next() {
                 Some(image) => {
                     if start_flag {
@@ -271,7 +322,7 @@ impl Printer {
                         buf.append(&mut [0x01, 0x00].to_vec());
                     }
 
-                    // Send raster images
+                    // Add raster line image data
                     for mut row in image {
                         //            buf.append(&mut [0x67, 0x00, row.len() as u8].to_vec());
                         buf.append(&mut [0x67, 0x00, 90].to_vec()); // 無圧縮の場合はn=90とする
@@ -279,18 +330,78 @@ impl Printer {
                     }
 
                     if iter.peek().is_some() {
-                        println!("there is next page");
-                        buf.append(&mut [0x0C].to_vec()); // FF : Print
+                        buf.push(0x0C); // FF : Print
                         self.write(buf)?;
-                        buf = Vec::new(); // Initialize buf for the next page after write.
-                        std::thread::sleep(std::time::Duration::from_secs(5));
-                    }
 
-                    continue;
+                        info!("Preparing for the next page.");
+                        self.read_status()?;
+
+
+                        // Wait for the actual printing and also check the printer status again.
+                        // End of media can happen while printing multiple pages !
+                        //
+                        // TODO: Add an error recovery functionality if possible.
+                        // loop {
+                        //     match self.read_status() {
+                        //         Ok(status) => {
+                        //             if status.phase == Phase::Receiving {
+                        //                 self.request_status()?;
+                        //                 match self.read_status() {
+                        //                     Ok(status) => {
+                        //                         // TODO: The status can contain error status
+
+                        //                         if status.status_type == StatusType::ReplyToRequest && status.phase == Phase::Receiving {
+                        //                             break;
+                        //                         } else {
+                        //                             continue;
+                        //                         }
+                        //                     },
+                        //                     Err(err) => return Err(err)
+                        //                 }
+                        //             } else {
+                        //                 continue;
+                        //             }
+                        //         }
+                        //         Err(err) => return Err(err),
+                        //     }
+                        // }
+
+                        // {
+                        //     loop {
+                        //         match self.read_status() {
+                        //             Ok(status) => {
+                        //                 if status.phase == Phase::Receiving {
+                        //                     break;
+                        //                 } else {
+                        //                     continue;
+                        //                 }
+                        //             }
+                        //             Err(err) => return Err(err),
+                        //         }
+                        //     }
+
+                        //     loop {
+                        //         self.request_status()?;
+                        //         match self.read_status() {
+                        //             Ok(status) => {
+                        //                 // TODO: The status can contain error status
+
+                        //                 if status.phase == Phase::Receiving {
+                        //                     break;
+                        //                 } else {
+                        //                     continue;
+                        //                 }
+                        //             }
+                        //             Err(err) => return Err(err),
+                        //         }
+                        //     }
+                        // }
+                    } else {
+                        buf.push(0x1A); // Control-Z : Print then Eject
+                        self.write(buf)?;
+                    }
                 }
                 None => {
-                    buf.append(&mut [0x1A].to_vec()); // Control-Z : Print then Eject
-                    self.write(buf)?;
                     break;
                 }
             }
@@ -334,18 +445,18 @@ impl Status {
         }
     }
 
-    pub fn check_media(self, media: Media) -> bool {
+    pub fn check_media(self, media: Media) -> Result<(), Error> {
         if let Some(m) = self.media {
-            m == media
+            Ok(())
         } else {
-            false
+            Err(Error::InvalidMedia(media))
         }
     }
 }
 
 // StatusType
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum StatusType {
     ReplyToRequest,
     Completed,
@@ -371,7 +482,7 @@ impl StatusType {
 }
 // Phase
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum Phase {
     Receiving,
     Printing,
@@ -456,7 +567,7 @@ impl Config {
         }
     }
 
-    pub fn set_cut_at_end(self, flag: bool) -> Self {
+    pub fn cut_at_end(self, flag: bool) -> Self {
         Config {
             cut_at_end: flag,
             ..self
@@ -474,12 +585,6 @@ impl Config {
         Config { feed, ..self }
     }
 
-    /// Change print media type.
-    /// TODO: Is this necessary ?
-    pub fn change_media(self, media: Media) -> Self {
-        Config { media, ..self }
-    }
-
     fn build(self) -> Result<Vec<u8>, Error> {
         let mut buf: Vec<u8> = Vec::new();
 
@@ -495,31 +600,37 @@ impl Config {
         }
         // Set auto cut settings
         {
-            let mut various_mode: u8 = 0b00000000;
+            let mut various_mode: u8 = 0b0000_0000;
             let mut auto_cut_num: u8 = 1;
 
             if let AutoCut::Enabled(n) = self.auto_cut {
+                various_mode = various_mode | 0b0100_0000;
                 auto_cut_num = n;
-                various_mode = various_mode | 0b01000000;
             }
-            buf.append(&mut [0x1B, 0x69, 0x41, auto_cut_num].to_vec()); // ESC i A : Set auto cut number
+
+            debug!("Various mode: {:X}", various_mode);
+            debug!("Auto cut num: {:X}", auto_cut_num);
+
             buf.append(&mut [0x1B, 0x69, 0x4D, various_mode].to_vec()); // ESC i M : Set various mode
+            buf.append(&mut [0x1B, 0x69, 0x41, auto_cut_num].to_vec()); // ESC i A : Set auto cut number
         }
         // Set expanded mode
         {
             let mut expanded_mode: u8 = 0b00000000;
 
-            if self.two_colors == true {
-                expanded_mode = expanded_mode | 0b00000001;
+            if self.two_colors {
+                expanded_mode = expanded_mode | 0b0000_0001;
             }
 
-            if self.cut_at_end == true {
-                expanded_mode = expanded_mode | 0b00001000;
+            if self.cut_at_end {
+                expanded_mode = expanded_mode | 0b0000_1000;
             };
 
-            if self.high_resolution == true {
-                expanded_mode = expanded_mode | 0b01000000;
+            if self.high_resolution {
+                expanded_mode = expanded_mode | 0b0100_0000;
             }
+
+            debug!("Expanded mode: {:X}", expanded_mode);
 
             buf.append(&mut [0x1B, 0x69, 0x4B, expanded_mode].to_vec()); // ESC i K : Set expanded mode
         }

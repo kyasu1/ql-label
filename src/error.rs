@@ -1,6 +1,6 @@
-use thiserror::Error;
-
+use crate::Media;
 use rusb;
+use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -18,6 +18,9 @@ pub enum Error {
 
     #[error("Invalid confifuration parameter")]
     InvalidConfig(String),
+
+    #[error("Invalid media is installed")]
+    InvalidMedia(Media),
 
     #[error("Status request return no response")]
     ReadStatusTimeout,

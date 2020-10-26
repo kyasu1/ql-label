@@ -4,14 +4,17 @@ use ptouch::{Config, ContinuousType, Media, Model, Printer};
 use std::path::Path;
 
 fn main() {
+    env_logger::init();
+
     // let file = "examples/rust-logo-256x256-blk.png";
     // let file = "examples/test-text.png";
     // let file = "examples/print-sample.png";
-    let file = "examples/label-mini.png";
+    // let file = "examples/label-mini.png";
+    let file = "examples/PAWN_TICKET_JP.bmp";
 
-    let im: image::DynamicImage = image::open(file).unwrap();
-    let (_, length) = im.dimensions();
-    let gray = im.grayscale();
+    let image: image::DynamicImage = image::open(file).unwrap();
+    let (_, length) = image.dimensions();
+    let gray = image.grayscale();
 
     // canvas width is fixed 720 dots (90 bytes)
     const WIDTH: u32 = 720;
@@ -26,31 +29,15 @@ fn main() {
     if true {
         let media = Media::Continuous(ContinuousType::Continuous62);
         let config: Config = Config::new(Model::QL800, "000G0Z714634".to_string(), media)
-            .high_resolution(true)
-            .set_cut_at_end(true)
+            .high_resolution(false)
+            .cut_at_end(true)
             .enable_auto_cut(1);
 
         match Printer::new(config) {
             Ok(printer) => {
-                printer.request_status().unwrap();
-                match printer.read_status() {
-                    Ok(result) => {
-                        println!("Printer Status before: {:?}", result);
-                        if result.check_media(media) {
-                            match printer.print_label(vec![bw.clone()]) {
-                                Ok(_) => println!("success"),
-                                Err(err) => println!("ERROR {:?}", err),
-                            }
-                            let result = printer.read_status();
-                            println!("status after: {:?}", result);
-                        } else {
-                            panic!("Media not much {:?}", media);
-                        }
-                    }
-                    Err(_) => panic!("Printer not responding for the status request"),
-                }
+                printer.print(vec![bw.clone(), bw]).unwrap();
             }
-            Err(err) => panic!("read error {}", err),
+            Err(err) => panic!("Error at main {}", err),
         }
     }
 }
