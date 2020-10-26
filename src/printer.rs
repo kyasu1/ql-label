@@ -463,7 +463,7 @@ impl Config {
         }
     }
 
-    pub fn change_resolution(self, high: bool) -> Self {
+    pub fn high_resolution(self, high: bool) -> Self {
         Config {
             high_resolution: high,
             ..self
