@@ -16,6 +16,9 @@ pub enum Error {
     #[error("Received invalid response from printer")]
     InvalidResponse(usize),
 
+    #[error("Invalid confifuration parameter")]
+    InvalidConfig(String),
+
     #[error("Status request return no response")]
     ReadStatusTimeout,
 

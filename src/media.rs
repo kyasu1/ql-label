@@ -323,17 +323,45 @@ impl Media {
         }
     }
 
+    pub fn get_default_feed_dots(&self) -> u16 {
+        match self {
+            Self::Continuous(_) => 35,
+            Self::DieCut(_) => 0,
+        }
+    }
+
+    pub fn check_feed_value(&self, feed: u16) -> Result<[u8; 2], String> {
+        match self {
+            Self::Continuous(_) => {
+                if feed < 35 || feed > 1500 {
+                    Err(format!("Feed value {} is out range.", feed))
+                } else {
+                    Ok(feed.to_le_bytes())
+                }
+            }
+            Self::DieCut(_) => {
+                if feed != 0 {
+                    Err(format!(
+                        "Feed value {} must be zero for die-cut medias",
+                        feed
+                    ))
+                } else {
+                    Ok([0x00, 0x00])
+                }
+            }
+        }
+    }
     pub fn set_media(&self, buf: &mut Vec<u8>, qualiy: bool) {
         // Can not see noticeable difference from the quality setting...
         let qualiry: u8 = if qualiy { 0b01000000 } else { 0b00000000 };
         let spec = self.spec();
         match self {
             Self::Continuous(_) => {
-                buf.push(0x86 & qualiry);
+                buf.push(0x86 | qualiry);
                 buf.push(0x0A);
             }
             Self::DieCut(_) => {
-                buf.push(0x8E & qualiry);
+                buf.push(0x8E | qualiry);
                 buf.push(0x0B);
             }
         }

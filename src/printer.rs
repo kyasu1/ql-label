@@ -8,9 +8,6 @@ use crate::{
     model::Model,
 };
 
-#[macro_use]
-use bitflags::bitflags;
-
 #[derive(Debug, Clone, Copy)]
 struct Endpoint {
     config: u8,
@@ -179,7 +176,11 @@ impl Printer {
                 if n == buf.len() {
                     Ok(n)
                 } else {
-                    println!("write error: {:?}", result);
+                    println!(
+                        "write error: bytes wrote {} != bytes supplied {}",
+                        n,
+                        buf.len()
+                    );
                     Err(Error::InvalidResponse(n))
                 }
             }
@@ -233,39 +234,70 @@ impl Printer {
         Ok(())
     }
 
-    pub fn print_label(&self, image: Vec<Vec<u8>>) -> Result<usize, Error> {
-        let mut buf: Vec<u8> = self.initialize();
-        buf.append(&mut [0x1B, 0x69, 0x61, 0x01].to_vec()); // Set raster command mode
-        buf.append(&mut [0x1B, 0x69, 0x21, 0x00].to_vec()); // Set auto status notificatoin mode
-
-        // ESC i z 印刷情報司令
-        self.set_media(&mut buf);
-        let len = (image.len() as u32).to_le_bytes();
-        // Number of raster lines
-        buf.append(&mut len.to_vec());
-        //
-        buf.append(&mut [0x00, 0x00].to_vec());
+    pub fn print_label(&self, images: Vec<Vec<Vec<u8>>>) -> Result<(), Error> {
+        let mut preamble: Vec<u8> = self.initialize();
+        preamble.append(&mut [0x1B, 0x69, 0x61, 0x01].to_vec()); // Set raster command mode
+        preamble.append(&mut [0x1B, 0x69, 0x21, 0x00].to_vec()); // Set auto status notificatoin mode
+        preamble.append(&mut [0x4D, 0x00].to_vec()); // Set compress mode to NO compression
 
         // apply config values
-        self.config.clone().build(&mut buf);
-
-        buf.append(&mut [0x1B, 0x69, 0x64, 0x23, 0x00].to_vec()); // Set margin / feed amount to 3mm
-
-        // Set compress mode to no compression
-        buf.append(&mut [0x4D, 0x00].to_vec());
-
-        // Send raster images
-        for mut row in image {
-            //            buf.append(&mut [0x67, 0x00, row.len() as u8].to_vec());
-            buf.append(&mut [0x67, 0x00, 90].to_vec()); // 無圧縮の場合はn=90とする
-            buf.append(&mut row);
+        match self.config.clone().build() {
+            Ok(mut buf) => preamble.append(&mut buf),
+            Err(err) => return Err(err),
         }
 
-        // Send print command
-        buf.append(&mut [0x1A].to_vec()); // Control-Z : Print then Eject
+        let mut start_flag: bool = true;
 
-        self.write(buf)
+        let mut iter = images.into_iter().peekable();
+
+        let mut buf: Vec<u8> = Vec::new();
+
+        loop {
+            match iter.next() {
+                Some(image) => {
+                    if start_flag {
+                        buf.append(&mut preamble);
+                    }
+
+                    // ESC i z 印刷情報司令
+                    self.set_media(&mut buf);
+                    // Set number of raster lines
+                    let len = (image.len() as u32).to_le_bytes();
+                    buf.append(&mut len.to_vec());
+                    if start_flag {
+                        buf.append(&mut [0x00, 0x00].to_vec());
+                        start_flag = false;
+                    } else {
+                        buf.append(&mut [0x01, 0x00].to_vec());
+                    }
+
+                    // Send raster images
+                    for mut row in image {
+                        //            buf.append(&mut [0x67, 0x00, row.len() as u8].to_vec());
+                        buf.append(&mut [0x67, 0x00, 90].to_vec()); // 無圧縮の場合はn=90とする
+                        buf.append(&mut row);
+                    }
+
+                    if iter.peek().is_some() {
+                        println!("there is next page");
+                        buf.append(&mut [0x0C].to_vec()); // FF : Print
+                        self.write(buf)?;
+                        buf = Vec::new(); // Initialize buf for the next page after write.
+                        std::thread::sleep(std::time::Duration::from_secs(5));
+                    }
+
+                    continue;
+                }
+                None => {
+                    buf.append(&mut [0x1A].to_vec()); // Control-Z : Print then Eject
+                    self.write(buf)?;
+                    break;
+                }
+            }
+        }
+        Ok(())
     }
+
     /// Request printer status. call this function once before printing.
     ///
     pub fn request_status(&self) -> Result<usize, Error> {
@@ -376,16 +408,8 @@ impl Notification {
     }
 }
 
-//
-
-bitflags! {
-    struct ExtendedMode: u8 {
-        const COLOR_MODE = 0b00000001;
-        const CUT_AT_END = 0b00001000;
-        const RESOULTION = 0b01000000;
-    }
-}
-
+/// Config
+///
 #[derive(Debug, Clone, Copy)]
 enum AutoCut {
     Enabled(u8),
@@ -401,6 +425,7 @@ pub struct Config {
     two_colors: bool,
     cut_at_end: bool,
     high_resolution: bool,
+    feed: u16,
 }
 
 impl Config {
@@ -413,6 +438,7 @@ impl Config {
             two_colors: false,
             cut_at_end: true,
             high_resolution: false,
+            feed: media.get_default_feed_dots(),
         }
     }
 
@@ -430,11 +456,22 @@ impl Config {
         }
     }
 
+    pub fn set_cut_at_end(self, flag: bool) -> Self {
+        Config {
+            cut_at_end: flag,
+            ..self
+        }
+    }
+
     pub fn change_resolution(self, high: bool) -> Self {
         Config {
             high_resolution: high,
             ..self
         }
+    }
+
+    pub fn set_feed_in_dots(self, feed: u16) -> Self {
+        Config { feed, ..self }
     }
 
     /// Change print media type.
@@ -443,33 +480,49 @@ impl Config {
         Config { media, ..self }
     }
 
-    fn build(self, buf: &mut std::vec::Vec<u8>) {
-        // set auto cut
-        let mut various_mode: u8 = 0b00000000;
-        let mut auto_cut_num: u8 = 1;
+    fn build(self) -> Result<Vec<u8>, Error> {
+        let mut buf: Vec<u8> = Vec::new();
 
-        if let AutoCut::Enabled(n) = self.auto_cut {
-            auto_cut_num = n;
-            various_mode = various_mode | 0b01000000;
+        // Set feeding values in dots
+        {
+            match self.media.check_feed_value(self.feed) {
+                Ok(feed) => {
+                    buf.append(&mut [0x1B, 0x69, 0x64].to_vec());
+                    buf.append(&mut feed.to_vec());
+                }
+                Err(msg) => return Err(Error::InvalidConfig(msg)),
+            }
         }
-        buf.append(&mut [0x1B, 0x69, 0x41, auto_cut_num].to_vec()); // ESC i A : Set auto cut number
-        buf.append(&mut [0x1B, 0x69, 0x4D, various_mode].to_vec()); // ESC i M : Set various mode
+        // Set auto cut settings
+        {
+            let mut various_mode: u8 = 0b00000000;
+            let mut auto_cut_num: u8 = 1;
 
-        // set expanded mode
-        let mut expanded_mode: u8 = 0b00000000;
-
-        if self.two_colors == true {
-            expanded_mode = expanded_mode | 0b00000001;
+            if let AutoCut::Enabled(n) = self.auto_cut {
+                auto_cut_num = n;
+                various_mode = various_mode | 0b01000000;
+            }
+            buf.append(&mut [0x1B, 0x69, 0x41, auto_cut_num].to_vec()); // ESC i A : Set auto cut number
+            buf.append(&mut [0x1B, 0x69, 0x4D, various_mode].to_vec()); // ESC i M : Set various mode
         }
+        // Set expanded mode
+        {
+            let mut expanded_mode: u8 = 0b00000000;
 
-        if self.cut_at_end == true {
-            expanded_mode = expanded_mode | 0b00001000;
-        };
+            if self.two_colors == true {
+                expanded_mode = expanded_mode | 0b00000001;
+            }
 
-        if self.high_resolution == true {
-            expanded_mode = expanded_mode | 0b01000000;
+            if self.cut_at_end == true {
+                expanded_mode = expanded_mode | 0b00001000;
+            };
+
+            if self.high_resolution == true {
+                expanded_mode = expanded_mode | 0b01000000;
+            }
+
+            buf.append(&mut [0x1B, 0x69, 0x4B, expanded_mode].to_vec()); // ESC i K : Set expanded mode
         }
-
-        buf.append(&mut [0x1B, 0x69, 0x4B, expanded_mode].to_vec()); // ESC i K : Set expanded mode
+        Ok(buf)
     }
 }

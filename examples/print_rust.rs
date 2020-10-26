@@ -67,8 +67,10 @@ fn main() {
 
     if true {
         let media = Media::Continuous(ContinuousType::Continuous29);
-        let config: Config =
-            Config::new(Model::QL800, "000G0Z714634".to_string(), media).change_resolution(true);
+        let config: Config = Config::new(Model::QL800, "000G0Z714634".to_string(), media)
+            .change_resolution(true)
+            .set_cut_at_end(false)
+            .disable_auto_cut();
 
         match Printer::new(config) {
             Ok(printer) => {
@@ -77,7 +79,7 @@ fn main() {
                     Ok(result) => {
                         println!("Printer Status before: {:?}", result);
                         if result.check_media(media) {
-                            match printer.print_label(bw) {
+                            match printer.print_label(vec![bw.clone(), bw]) {
                                 Ok(_) => println!("success"),
                                 Err(err) => println!("ERROR {:?}", err),
                             }
