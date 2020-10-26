@@ -1,5 +1,7 @@
 ## 目的
 
+宝飾用のプライスラベル作成
+
 This module supports API for priting on multiple P-Touch seriese printers connected by USB ports.
 
 

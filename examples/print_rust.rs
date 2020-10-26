@@ -1,6 +1,6 @@
 use image::GenericImage;
 use image::{GenericImageView, ImageFormat};
-use ptouch::{Config, Media, Model, Printer};
+use ptouch::{Config, ContinuousType, Media, Model, Printer};
 use std::path::Path;
 
 fn main() {
@@ -11,7 +11,6 @@ fn main() {
 
     let im: image::DynamicImage = image::open(file).unwrap();
     let (_, height) = im.dimensions();
-
 
     let width = 720;
     let length = height; // 480;
@@ -31,6 +30,10 @@ fn main() {
     // gray.invert();
     // let bytes = gray.to_bytes();
 
+    // convert to black and white data
+    // this works fine for monochrome image in original
+    // TODO: Add support for a dithering algorithm to print phots
+    //
     let mut bw: Vec<Vec<u8>> = Vec::new();
 
     for y in 0..length {
@@ -63,20 +66,29 @@ fn main() {
     }
 
     if true {
-        match Printer::new(Model::QL800, "000G0Z714634".to_string()) {
+        let media = Media::Continuous(ContinuousType::Continuous29);
+        let config: Config =
+            Config::new(Model::QL800, "000G0Z714634".to_string(), media).change_resolution(true);
+
+        match Printer::new(config) {
             Ok(printer) => {
                 printer.request_status().unwrap();
-                let result = printer.read_status();
-                println!("status before: {:?}", result);
-
-                let config: Config = Config::new().change_resolution(true);
-
-                match printer.print_label(bw, config) {
-                    Ok(_) => println!("success"),
-                    Err(err) => println!("ERROR {:?}", err),
+                match printer.read_status() {
+                    Ok(result) => {
+                        println!("Printer Status before: {:?}", result);
+                        if result.check_media(media) {
+                            match printer.print_label(bw) {
+                                Ok(_) => println!("success"),
+                                Err(err) => println!("ERROR {:?}", err),
+                            }
+                            let result = printer.read_status();
+                            println!("status after: {:?}", result);
+                        } else {
+                            panic!("Media not much {:?}", media);
+                        }
+                    }
+                    Err(_) => panic!("Printer not responding for the status request"),
                 }
-                let result = printer.read_status();
-                println!("status after: {:?}", result);
             }
             Err(err) => panic!("read error {}", err),
         }

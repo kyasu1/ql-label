@@ -1,8 +1,8 @@
 pub use crate::{
     error::{Error, PrinterError},
-    printer::{Printer, Status, Config},
-    model::{Model},
-    media::{Media},
+    media::{ContinuousType, Media},
+    model::Model,
+    printer::{Config, Printer, Status},
 };
 
 //
@@ -14,22 +14,22 @@ pub use crate::{
 // };
 
 mod error;
-mod printer;
 mod media;
 mod model;
+mod printer;
 
-/// This returns list of connected Brother P-Touch series printers.
-pub fn list_printers() -> Vec<Printer> {
-    unimplemented!()
-}
+// /// This returns list of connected Brother P-Touch series printers.
+// pub fn list_printers() -> Vec<Printer> {
+//     unimplemented!()
+// }
+
+// // ///
+// pub fn cancel_printing() -> Result<(), Error> {
+//     unimplemented!()
+// }
 
 // ///
-pub fn cancel_printing() -> Result<(), Error> {
-    unimplemented!()
-}
-
-///
-/// 
-pub fn print() -> Result<(), Error> {
-    unimplemented!()
-}
+// ///
+// pub fn print() -> Result<(), Error> {
+//     unimplemented!()
+// }

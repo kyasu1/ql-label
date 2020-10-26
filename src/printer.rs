@@ -23,71 +23,70 @@ pub struct Printer {
     handle: Box<DeviceHandle<Context>>,
     endpoint_out: Endpoint,
     endpoint_in: Endpoint,
-}
-
-struct PrinterInner {
-    handle: Box<DeviceHandle<Context>>,
-    endpoint_out: Endpoint,
-    endpoint_in: Endpoint,
-}
-
-pub trait Printable: Clone + Sized {
-    fn cancel() -> Result<(), Error>;
+    config: Config,
 }
 
 impl Printer {
-    pub fn new(model: Model, serial: String) -> Result<Self, Error> {
+    pub fn new(config: Config) -> Result<Self, Error> {
         rusb::set_log_level(rusb::LogLevel::Debug);
         match Context::new() {
-            Ok(mut context) => match Self::open_device(&mut context, 0x04F9, model.pid(), serial) {
-                Some((mut device, device_desc, mut handle)) => {
-                    handle.reset()?;
+            Ok(mut context) => {
+                match Self::open_device(
+                    &mut context,
+                    0x04F9,
+                    config.model.pid(),
+                    config.serial.clone(),
+                ) {
+                    Some((mut device, device_desc, mut handle)) => {
+                        handle.reset()?;
 
-                    let endpoint_in = match Self::find_endpoint(
-                        &mut device,
-                        &device_desc,
-                        Direction::In,
-                        TransferType::Bulk,
-                    ) {
-                        Some(endpoint) => endpoint,
-                        None => return Err(Error::MissingEndpoint),
-                    };
+                        let endpoint_in = match Self::find_endpoint(
+                            &mut device,
+                            &device_desc,
+                            Direction::In,
+                            TransferType::Bulk,
+                        ) {
+                            Some(endpoint) => endpoint,
+                            None => return Err(Error::MissingEndpoint),
+                        };
 
-                    let endpoint_out = match Self::find_endpoint(
-                        &mut device,
-                        &device_desc,
-                        Direction::Out,
-                        TransferType::Bulk,
-                    ) {
-                        Some(endpoint) => endpoint,
-                        None => return Err(Error::MissingEndpoint),
-                    };
+                        let endpoint_out = match Self::find_endpoint(
+                            &mut device,
+                            &device_desc,
+                            Direction::Out,
+                            TransferType::Bulk,
+                        ) {
+                            Some(endpoint) => endpoint,
+                            None => return Err(Error::MissingEndpoint),
+                        };
 
-                    // QL-800では`has_kernel_driver`が`true`となる
-                    // QL-820NWBでは`has_kernel_driver`が`false`となる
-                    // `has_kernel_driver`が`true`の場合に、カーネルドライバーをデタッチしないとエラーとなる
-                    //
-                    handle.set_auto_detach_kernel_driver(true)?;
-                    let has_kernel_driver = match handle.kernel_driver_active(0) {
-                        Ok(true) => {
-                            handle.detach_kernel_driver(0).ok();
-                            true
-                        }
-                        _ => false,
-                    };
-                    info!(" Kernel driver support is {}", has_kernel_driver);
-                    handle.set_active_configuration(1)?;
-                    handle.claim_interface(0)?;
-                    handle.set_alternate_setting(0, 0)?;
+                        // QL-800では`has_kernel_driver`が`true`となる
+                        // QL-820NWBでは`has_kernel_driver`が`false`となる
+                        // `has_kernel_driver`が`true`の場合に、カーネルドライバーをデタッチしないとエラーとなる
+                        //
+                        handle.set_auto_detach_kernel_driver(true)?;
+                        let has_kernel_driver = match handle.kernel_driver_active(0) {
+                            Ok(true) => {
+                                handle.detach_kernel_driver(0).ok();
+                                true
+                            }
+                            _ => false,
+                        };
+                        info!(" Kernel driver support is {}", has_kernel_driver);
+                        handle.set_active_configuration(1)?;
+                        handle.claim_interface(0)?;
+                        handle.set_alternate_setting(0, 0)?;
 
-                    Ok(Printer {
-                        handle: Box::new(handle),
-                        endpoint_out: endpoint_out,
-                        endpoint_in: endpoint_in,
-                    })
+                        Ok(Printer {
+                            handle: Box::new(handle),
+                            endpoint_out,
+                            endpoint_in,
+                            config,
+                        })
+                    }
+                    None => Err(Error::DeviceOffline),
                 }
-                None => Err(Error::DeviceOffline),
-            },
+            }
             Err(err) => Err(Error::UsbError(err)),
         }
     }
@@ -215,37 +214,38 @@ impl Printer {
         Err(Error::ReadStatusTimeout)
     }
 
-    // pub print_continuous(image: Vec<u8>) -> Result<(), Error> {
-    //     let mut buffer: Vec<u8>;
-
-    //     self.initialize();
-    //     self.request_status();
-    //     self.set_raster_mode();
-    // }
-    /// Initialize printer
-    ///
-    pub fn initialize(&self) -> Result<(), Error> {
-        self.write([0x00; 400].to_vec())?;
-        self.write([0x1b, 0x40].to_vec())?;
-        Ok(())
-    }
-
-    pub fn print_label(&self, image: Vec<Vec<u8>>, config: Config) -> Result<usize, Error> {
+    fn initialize(&self) -> Vec<u8> {
         let mut buf: Vec<u8> = Vec::new();
         buf.append(&mut [0x00; 400].to_vec());
         buf.append(&mut [0x1B, 0x40].to_vec());
+        buf
+    }
+
+    fn set_media(&self, buf: &mut std::vec::Vec<u8>) {
+        buf.append(&mut [0x1B, 0x69, 0x7A].to_vec());
+
+        self.config.media.set_media(buf);
+    }
+
+    pub fn cancel(&self) -> Result<(), Error> {
+        let buf = self.initialize();
+        self.write(buf)?;
+        Ok(())
+    }
+
+    pub fn print_label(&self, image: Vec<Vec<u8>>) -> Result<usize, Error> {
+        let mut buf: Vec<u8> = self.initialize();
         buf.append(&mut [0x1B, 0x69, 0x61, 0x01].to_vec()); // Set raster command mode
         buf.append(&mut [0x1B, 0x69, 0x21, 0x00].to_vec()); // Set auto status notificatoin mode
 
         // ESC i z 印刷情報司令
-        // buf.append(&mut [0x1B, 0x69, 0x7A, 0x8E, 0x0A, 0x3E, 0x64].to_vec());
-        buf.append(&mut [0x1B, 0x69, 0x7A, 0x86, 0x0A, 0x3E, 0x00].to_vec());
+        self.set_media(&mut buf);
         let len = (image.len() as u32).to_le_bytes();
         buf.append(&mut len.to_vec());
         buf.append(&mut [0x00, 0x00].to_vec());
 
         // apply config values
-        config.build(&mut buf);
+        self.config.clone().build(&mut buf);
 
         buf.append(&mut [0x1B, 0x69, 0x64, 0x23, 0x00].to_vec()); // Set margin / feed amount to 3mm
         buf.append(&mut [0x4D, 0x00].to_vec());
@@ -260,108 +260,9 @@ impl Printer {
     /// Request printer status. call this function once before printing.
     ///
     pub fn request_status(&self) -> Result<usize, Error> {
-        let mut buf: Vec<u8> = Vec::new();
-        buf.append(&mut [0x00; 400].to_vec());
-        buf.append(&mut [0x1B, 0x40].to_vec());
+        let mut buf: Vec<u8> = self.initialize();
         buf.append(&mut [0x1b, 0x69, 0x53].to_vec());
         self.write(buf)
-    }
-
-    /// Specify margin amount (feed amount)
-    ///
-    /// ESC i d {n1} {n2}
-    ///
-    /// - Margin amount (dots) = n1 + n2 * 256
-    ///
-    /// This setting is ignored for die-cut labels.
-    ///
-    pub fn set_margin(&self, n1: u8, n2: u8) -> Result<usize, Error> {
-        self.write([0x1b, 0x69, 0x64, n1, n2].to_vec())
-    }
-
-    /// Helper function to set the margin amount in dots.
-    ///
-    /// This setting is ignored for die-cut labels.
-    ///
-    pub fn set_margin_with_dots(&self, dots: u16) -> Result<(), Error> {
-        let bytes = dots.to_be_bytes();
-        self.write([0x1b, 0x69, 0x64, bytes[1], bytes[0]].to_vec())?;
-        Ok(())
-    }
-
-    /// Switch dynamic command mode. Fixed to the raster mode in this module.
-    /// ESC i a 1
-    ///
-    pub fn set_raster_mode(&self) -> Result<(), Error> {
-        self.write([0x1B, 0x69, 0x61, 0x01].to_vec())?;
-        Ok(())
-    }
-
-    /// Switch automatic status notificaton mode.Model
-    /// ESC i ! {n1}
-    ///
-    /// notify == true => 0: Notify (default)
-    /// notify == false => 1: Do not notify
-    ///
-    pub fn set_nottification_mode(&self, notify: bool) -> Result<(), Error> {
-        if notify {
-            self.write([0x1B, 0x69, 0x21, 0x00].to_vec())?;
-        } else {
-            self.write([0x1B, 0x69, 0x21, 0x01].to_vec())?;
-        }
-        Ok(())
-    }
-
-    ///
-    ///
-    /// TODO: support compression mode
-    pub fn transfer_raster(&self, buf: Vec<u8>) -> Result<(), Error> {
-        self.write([0x67, 0x00, 0x5A].to_vec())?;
-        self.write(buf)?;
-        Ok(())
-    }
-
-    ///
-    ///
-    /// Compression mode only ?
-    pub fn transfer_raster_color(&self, buf: Vec<u8>) -> Result<(), Error> {
-        self.write([0x77, 0x01, buf.len() as u8].to_vec())?;
-        Ok(())
-    }
-
-    /// Zero raster graphics
-    ///
-    /// QL-800 does not support this command
-    ///
-    pub fn zero_raster(&self) -> Result<(), Error> {
-        self.write([0x5A].to_vec())?;
-        Ok(())
-    }
-
-    /// Print command
-    ///
-    /// Used as a print command at the end of pages other than the last page when multiple pages are printed.
-    pub fn print(&self) -> Result<(), Error> {
-        self.write([0xFF].to_vec())?;
-        Ok(())
-    }
-
-    /// Print command with feeding
-    ///
-    /// Used as a print command at the end of the last page.
-    pub fn print_last(&self) -> Result<(), Error> {
-        self.write([0x1A].to_vec())?;
-        Ok(())
-    }
-
-    pub fn print_information(&self) -> Result<(), Error> {
-        Ok(())
-    }
-
-    fn set_autocut(mut buf: Vec<u8>, enabled: bool) {
-        let byte: u8 = if enabled { 0b0100_0000 } else { 0b0000_0000 };
-
-        buf.append(&mut [0x1B, 0x69, 0x4B, byte].to_vec())
     }
 }
 
@@ -389,6 +290,14 @@ impl Status {
             status_type: StatusType::from_code(buf[18]),
             phase: Phase::from_buf(buf),
             notification: Notification::from_code(buf[22]),
+        }
+    }
+
+    pub fn check_media(self, media: Media) -> bool {
+        if let Some(m) = self.media {
+            m == media
+        } else {
+            false
         }
     }
 }
@@ -462,18 +371,23 @@ impl Notification {
 
 bitflags! {
     struct ExtendedMode: u8 {
-        const ColorMode = 0b00000001;
-        const CutAtEnd = 0b00001000;
-        const Resolution = 0b01000000;
+        const COLOR_MODE = 0b00000001;
+        const CUT_AT_END = 0b00001000;
+        const RESOULTION = 0b01000000;
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 enum AutoCut {
     Enabled(u8),
     Disabled,
 }
 
+#[derive(Debug, Clone)]
 pub struct Config {
+    model: Model,
+    serial: String,
+    media: Media,
     auto_cut: AutoCut,
     two_colors: bool,
     cut_at_end: bool,
@@ -481,8 +395,11 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn new() -> Config {
+    pub fn new(model: Model, serial: String, media: Media) -> Config {
         Config {
+            model: model,
+            serial: serial,
+            media: media,
             auto_cut: AutoCut::Enabled(1),
             two_colors: false,
             cut_at_end: true,
@@ -509,6 +426,12 @@ impl Config {
             high_resolution: high,
             ..self
         }
+    }
+
+    /// Change print media type.
+    /// TODO: Is this necessary ?
+    pub fn change_media(self, media: Media) -> Self {
+        Config { media, ..self }
     }
 
     fn build(self, buf: &mut std::vec::Vec<u8>) {

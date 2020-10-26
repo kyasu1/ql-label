@@ -1,6 +1,6 @@
 use crate::media::Media;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Model {
     QL800,
     QL810W,
@@ -25,11 +25,11 @@ impl Model {
         }
     }
 
-    pub fn supported_medias(&self) -> Vec<Media> {
-        match self {
-            Self::QL800 => vec![Media::Continuous29],
-            Self::QL810W => vec![Media::Continuous29],
-            Self::QL820NWB => vec![Media::Continuous29],
-        }
-    }
+    // pub fn supported_medias(&self) -> Vec<Media> {
+    //     match self {
+    //         Self::QL800 => vec![Media::Continuous29],
+    //         Self::QL810W => vec![Media::Continuous29],
+    //         Self::QL820NWB => vec![Media::Continuous29],
+    //     }
+    // }
 }
