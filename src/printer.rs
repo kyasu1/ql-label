@@ -224,7 +224,7 @@ impl Printer {
     fn set_media(&self, buf: &mut std::vec::Vec<u8>) {
         buf.append(&mut [0x1B, 0x69, 0x7A].to_vec());
 
-        self.config.media.set_media(buf);
+        self.config.media.set_media(buf, true);
     }
 
     pub fn cancel(&self) -> Result<(), Error> {
@@ -241,20 +241,29 @@ impl Printer {
         // ESC i z 印刷情報司令
         self.set_media(&mut buf);
         let len = (image.len() as u32).to_le_bytes();
+        // Number of raster lines
         buf.append(&mut len.to_vec());
+        //
         buf.append(&mut [0x00, 0x00].to_vec());
 
         // apply config values
         self.config.clone().build(&mut buf);
 
         buf.append(&mut [0x1B, 0x69, 0x64, 0x23, 0x00].to_vec()); // Set margin / feed amount to 3mm
+
+        // Set compress mode to no compression
         buf.append(&mut [0x4D, 0x00].to_vec());
+
+        // Send raster images
         for mut row in image {
             //            buf.append(&mut [0x67, 0x00, row.len() as u8].to_vec());
             buf.append(&mut [0x67, 0x00, 90].to_vec()); // 無圧縮の場合はn=90とする
             buf.append(&mut row);
         }
+
+        // Send print command
         buf.append(&mut [0x1A].to_vec()); // Control-Z : Print then Eject
+
         self.write(buf)
     }
     /// Request printer status. call this function once before printing.

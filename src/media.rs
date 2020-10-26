@@ -323,10 +323,20 @@ impl Media {
         }
     }
 
-    pub fn set_media(&self, buf: &mut Vec<u8>) {
+    pub fn set_media(&self, buf: &mut Vec<u8>, qualiy: bool) {
+        // Can not see noticeable difference from the quality setting...
+        let qualiry: u8 = if qualiy { 0b01000000 } else { 0b00000000 };
         let spec = self.spec();
-        buf.push(0x86);
-        buf.push(0x0A);
+        match self {
+            Self::Continuous(_) => {
+                buf.push(0x86 & qualiry);
+                buf.push(0x0A);
+            }
+            Self::DieCut(_) => {
+                buf.push(0x8E & qualiry);
+                buf.push(0x0B);
+            }
+        }
         buf.push(spec.width.mm);
         buf.push(spec.length.mm);
     }
@@ -357,6 +367,7 @@ impl Media {
                 (38, 90) => Some(Self::DieCut(DieCutType::DieCut38x90)),
                 (39, 48) => Some(Self::DieCut(DieCutType::DieCut39x48)),
                 (52, 29) => Some(Self::DieCut(DieCutType::DieCut52x29)),
+                (54, 29) => Some(Self::DieCut(DieCutType::DieCut54x29)),
                 (60, 86) => Some(Self::DieCut(DieCutType::DieCut60x86)),
                 (62, 29) => Some(Self::DieCut(DieCutType::DieCut62x29)),
                 (62, 100) => Some(Self::DieCut(DieCutType::DieCut62x100)),
