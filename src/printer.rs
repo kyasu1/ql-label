@@ -301,6 +301,8 @@ impl Printer {
 
         let mut start_flag: bool = true;
         let mut iter = images.into_iter().peekable();
+        let mut color = false;
+
         loop {
             let mut buf: Vec<u8> = Vec::new();
 
@@ -313,7 +315,12 @@ impl Printer {
                     // ESC i z 印刷情報司令
                     self.set_media(&mut buf);
                     // Set number of raster lines
-                    let len = (image.len() as u32).to_le_bytes();
+                    let len: [u8; 4] = if self.config.two_colors {
+                        ((image.len() / 2) as u32).to_le_bytes()
+                    } else {
+                        ((image.len()) as u32).to_le_bytes()
+                    };
+
                     buf.append(&mut len.to_vec());
                     if start_flag {
                         buf.append(&mut [0x00, 0x00].to_vec());
@@ -323,11 +330,25 @@ impl Printer {
                     }
 
                     // Add raster line image data
-                    for mut row in image {
-                        //            buf.append(&mut [0x67, 0x00, row.len() as u8].to_vec());
-                        buf.append(&mut [0x67, 0x00, 90].to_vec()); // Set 0x90 works well for no compression
-                        buf.append(&mut row);
+                    if self.config.two_colors {
+                        for mut row in image {
+                            if color {
+                                buf.append(&mut [0x77, 0x01, 90].to_vec());
+                                buf.append(&mut row);
+                                color = !color;
+                            } else {
+                                buf.append(&mut [0x77, 0x02, 90].to_vec());
+                                buf.append(&mut row);
+                                color = !color;
+                            }
+                        }
+                    } else {
+                        for mut row in image {
+                           buf.append(&mut [0x67, 0x00, 90].to_vec());
+                           buf.append(&mut row);
+                        }                        
                     }
+
 
                     if iter.peek().is_some() {
                         buf.push(0x0C); // FF : Print
@@ -520,6 +541,10 @@ impl Config {
 
     pub fn set_feed_in_dots(self, feed: u16) -> Self {
         Config { feed, ..self }
+    }
+
+    pub fn set_color(self, two_colors: bool) -> Self {
+        Config { two_colors, ..self }
     }
 
     fn build(self) -> Result<Vec<u8>, Error> {

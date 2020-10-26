@@ -8,8 +8,8 @@ fn main() {
 
     // let file = "examples/rust-logo-256x256-blk.png";
     // let file = "examples/test-text.png";
-    let file = "examples/print-sample.png";
-    // let file = "examples/label-mini.png";
+    // let file = "examples/print-sample.png";
+    let file = "examples/label-mini.png";
     // let file = "examples/PAWN_TICKET_JP.bmp";
     // let file = "examples/label62x29.png";
 
@@ -25,7 +25,7 @@ fn main() {
 
     let mut buffer = image::DynamicImage::new_luma8(WIDTH, length);
     buffer.invert();
-    buffer.copy_from(&gray, 12, 0).unwrap();
+    buffer.copy_from(&gray, 0, 0).unwrap();
     buffer.invert();
     let bytes = buffer.to_bytes();
 
@@ -35,6 +35,7 @@ fn main() {
         let config: Config = Config::new(Model::QL800, "000G0Z714634".to_string(), media)
             .high_resolution(false)
             .cut_at_end(true)
+            .set_color(true)
             .enable_auto_cut(1);
 
         match Printer::new(config) {
