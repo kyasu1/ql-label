@@ -1,6 +1,6 @@
 use image::GenericImage;
 use image::GenericImageView;
-use ptouch::{Config, ContinuousType, Media, Model, Printer};
+use ptouch::{Config, ContinuousType, DieCutType, Media, Model, Printer};
 use std::path::Path;
 
 fn main() {
@@ -8,9 +8,10 @@ fn main() {
 
     // let file = "examples/rust-logo-256x256-blk.png";
     // let file = "examples/test-text.png";
-    // let file = "examples/print-sample.png";
+    let file = "examples/print-sample.png";
     // let file = "examples/label-mini.png";
-    let file = "examples/PAWN_TICKET_JP.bmp";
+    // let file = "examples/PAWN_TICKET_JP.bmp";
+    // let file = "examples/label62x29.png";
 
     let image: image::DynamicImage = image::open(file).unwrap();
     let (_, length) = image.dimensions();
@@ -18,16 +19,19 @@ fn main() {
 
     // canvas width is fixed 720 dots (90 bytes)
     const WIDTH: u32 = 720;
+
+    // let media = Media::DieCut(DieCutType::DieCut62x29);
+    let media = Media::Continuous(ContinuousType::Continuous62);
+
     let mut buffer = image::DynamicImage::new_luma8(WIDTH, length);
     buffer.invert();
-    buffer.copy_from(&gray, 0, 0).unwrap();
+    buffer.copy_from(&gray, 12, 0).unwrap();
     buffer.invert();
     let bytes = buffer.to_bytes();
 
     let bw = to_bw(WIDTH, length, bytes);
 
     if true {
-        let media = Media::Continuous(ContinuousType::Continuous62);
         let config: Config = Config::new(Model::QL800, "000G0Z714634".to_string(), media)
             .high_resolution(false)
             .cut_at_end(true)
@@ -35,7 +39,7 @@ fn main() {
 
         match Printer::new(config) {
             Ok(printer) => {
-                printer.print(vec![bw.clone(), bw]).unwrap();
+                printer.print(vec![bw.clone()]).unwrap();
             }
             Err(err) => panic!("Error at main {}", err),
         }

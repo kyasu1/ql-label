@@ -325,77 +325,14 @@ impl Printer {
                     // Add raster line image data
                     for mut row in image {
                         //            buf.append(&mut [0x67, 0x00, row.len() as u8].to_vec());
-                        buf.append(&mut [0x67, 0x00, 90].to_vec()); // 無圧縮の場合はn=90とする
+                        buf.append(&mut [0x67, 0x00, 90].to_vec()); // Set 0x90 works well for no compression
                         buf.append(&mut row);
                     }
 
                     if iter.peek().is_some() {
                         buf.push(0x0C); // FF : Print
                         self.write(buf)?;
-
-                        info!("Preparing for the next page.");
                         self.read_status()?;
-
-
-                        // Wait for the actual printing and also check the printer status again.
-                        // End of media can happen while printing multiple pages !
-                        //
-                        // TODO: Add an error recovery functionality if possible.
-                        // loop {
-                        //     match self.read_status() {
-                        //         Ok(status) => {
-                        //             if status.phase == Phase::Receiving {
-                        //                 self.request_status()?;
-                        //                 match self.read_status() {
-                        //                     Ok(status) => {
-                        //                         // TODO: The status can contain error status
-
-                        //                         if status.status_type == StatusType::ReplyToRequest && status.phase == Phase::Receiving {
-                        //                             break;
-                        //                         } else {
-                        //                             continue;
-                        //                         }
-                        //                     },
-                        //                     Err(err) => return Err(err)
-                        //                 }
-                        //             } else {
-                        //                 continue;
-                        //             }
-                        //         }
-                        //         Err(err) => return Err(err),
-                        //     }
-                        // }
-
-                        // {
-                        //     loop {
-                        //         match self.read_status() {
-                        //             Ok(status) => {
-                        //                 if status.phase == Phase::Receiving {
-                        //                     break;
-                        //                 } else {
-                        //                     continue;
-                        //                 }
-                        //             }
-                        //             Err(err) => return Err(err),
-                        //         }
-                        //     }
-
-                        //     loop {
-                        //         self.request_status()?;
-                        //         match self.read_status() {
-                        //             Ok(status) => {
-                        //                 // TODO: The status can contain error status
-
-                        //                 if status.phase == Phase::Receiving {
-                        //                     break;
-                        //                 } else {
-                        //                     continue;
-                        //                 }
-                        //             }
-                        //             Err(err) => return Err(err),
-                        //         }
-                        //     }
-                        // }
                     } else {
                         buf.push(0x1A); // Control-Z : Print then Eject
                         self.write(buf)?;

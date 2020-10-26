@@ -1,6 +1,6 @@
 pub use crate::{
     error::{Error, PrinterError},
-    media::{ContinuousType, Media},
+    media::{ContinuousType, DieCutType, Media},
     model::Model,
     printer::{Config, Printer, Status},
 };
