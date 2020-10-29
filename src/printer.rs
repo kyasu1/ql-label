@@ -518,7 +518,7 @@ impl Config {
         Config { feed, ..self }
     }
 
-    pub fn set_color(self, two_colors: bool) -> Self {
+    pub fn two_colors(self, two_colors: bool) -> Self {
         Config { two_colors, ..self }
     }
 

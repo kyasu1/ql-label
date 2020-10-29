@@ -1,87 +1,146 @@
-## 目的
+# ptouch
 
-宝飾用のプライスラベル作成
+`ptouch` provides a printer driver for Brother P-Touch QL series label printers connected to USB ports. This allows programatically print out multiple labels represented by a struct implemnting `Iterator` trait. Each data is just a two dimensional array of Vec<Vec<u8>>, so it is easy to convert from any image formats. You can drive multiple printers at the same time.
 
-This module supports API for priting on multiple P-Touch seriese printers connected by USB ports.
+## Features
 
+- Print multiple labels at once.
+- High resolution printing support.
+- Two colors printing support.
+- Support multiple printers on one computer.
 
-Create a new printer by specifying the model and the serial number 
+## Usage
 
-A printer driver for Brother P-Touch QL Series connected by USB Ports. 
+Only USB connection is supported in this crate. 
 
+### Media Tape
+
+Choose a media tape whatever you want to use and install it in the printer, then declare the matching media enum.
+
+```rust
+let media = ptouch::Media::Continous(ContinuousType::Continuous62);
+```
+
+Theare are two types of media tape, Continuous and DieCut, each one has several size variations. In this example we choose Continous tape with 62mm width.
+
+### Serial Number and Model
+
+You need the model type and the serial number of your printer to use. You can check them by insepcting your USB ports by `lsusb -v`, which will show something like follows, then note the `iProduct` and `iSerial` field values.
 
 ```
-/home/yako/Projects/node-ptouch-usb/node_modules/usb/usb.js:38
-	this.__open()
-	     ^
-
-Error: LIBUSB_ERROR_ACCESS
+Bus 001 Device 003: ID 04f9:209b Brother Industries, Ltd 
+Device Descriptor:
+  bLength                18
+  bDescriptorType         1
+  bcdUSB               2.00
+  bDeviceClass            0 (Defined at Interface level)
+  bDeviceSubClass         0 
+  bDeviceProtocol         0 
+  bMaxPacketSize0        64
+  idVendor           0x04f9 Brother Industries, Ltd
+  idProduct          0x209b 
+  bcdDevice            1.00
+  iManufacturer           1 Brother
+  iProduct                2 QL-800
+  iSerial                 3 000G0Z000000
 ```
 
-`LIBUSB_ERROR_ACCESS`とエラーが発生する
+With those information we can intialize our configurations as follows.
+
+```rust
+let config: Config = Config::new(Model::QL800, "000G0Z000000".to_string(), media)
+	.high_resolution(false)
+	.cut_at_end(true)
+	.two_colors(false)
+	.enable_auto_cut(1);
+```
+
+These are default settings, `high_resolution` and `two_colors` options work but you need to provide appropriate data.
+
+### Label Image Data
+
+This part is tricky, since this crate provides only printing capabilities, label data must be prepared with compatible format. As shown in the printer manual, QL series expects image data with a 1bit index bitmap split by lines in an appropriate orders. Please see the manual for more detail.
+
+In this example we create an image data with 720 x 400 px size by using an application. Then using `image` crate to read and convert it to a grayscale data. Then using `step_filter_normal` function, which is supplied with this crate, we binalize and pack bits 90 bytes width vector data.
+
+```rust
+let file = "examples/rust-logo.png";
+let image: image::DynamicImage = image::open(file).unwrap();
+let (_, length) = image.dimensions();
+let gray = image.grayscale();
+let mut buffer = image::DynamicImage::new_luma8(ptouch::WIDE_PRINTER_WIDTH, length);
+buffer.invert();
+buffer.copy_from(&gray, 0, 0).unwrap();
+buffer.invert();
+let bytes = buffer.to_bytes();
+let bw = ptouch::utils::step_filter_normal(80, length, bytes);
+```
+
+#### Tips for creating data
+
+In this crate, the width of image data must be 720px, which is the number of pins the printer have. The length varies depending on the label media. For the DieCut labels, there is a specif value. In case of the Continous labels, you can choose any length between 150px to 11811px for normal resolution (for 300 dpi). If you are specifying high_resolution or two_clolors options, it must be halved. After determing the size, place your contets in the area where actual labels go through. If you are using 62mm media, full width will be printed. But for 29mm media, you need to give an offset of 408 pixel on the left side then place content in 306 pixel width. You can check the details of media specification in the manual.
+
+### Printing
+
+Once you get the bitmap data, you can supply them as a Vec.
+
+```rust
+match Printer::new(config) {
+    Ok(printer) => {
+		printer.print(vec![bw.clone()]).unwrap();
+    }
+    Err(err) => panic!("Printer Error {}", err),
+}
+```
+
+If the configuration value is invalid the `new` function will return an error.
+
+Note: When sending a long label, at maximum it can be 1000mm long, rusb will timeout and casue error. 
+
+## Supported Printers
+
+The following models are tested by myself. 
+
+- QL-720NW
+- QL-800
+- QL-820NWB
+
+Anothre printers listed in the `ptouch::Model` should also work but we might need to some tweeking.
+
+## Todos
+
+- [] Better error handling and reporting, what to do when label ends ?
+- [] Binalization with dithering support
+- [] Binalization with two colors support
+
+## Tips
+
+### Allow access to USB port on ubuntu
+
+For my system with ubuntu 18.04 on Raspberry Pi 4, I got an error about permission to `/dev/usb/lp0`. To fix that I needed to add something like follows.
+
+Add the current user to `plugdev` group.
 
 ```sh
 $ sudo gpasswd -a $USER plugdev
 ```
 
-## udevルールを追加
+Add a new rule for udev. Here the number of filename must be higher than 60 to apply its config(Wasted whole day to notice abouth that >.<).
 
-```sh:/etc/udev/rules.d/50-ptouch.rules
+```sh:/etc/udev/rules.d/65-ptouch.rules
 SUBSYSTEMS=="usb", ATTRS{idVendor}=="04f9", ATTRS{idProduct}=="209b|209c|209d", MODE="664", GROUP="plugdev"
 ```
+
+Reload the rules.
 
 ```
 sudo udevadm trigger
 sudo udevadm control --reload-rules
 ```
 
-
 https://static.dev.sifive.com/dev-tools/FreedomStudio/2019.08/freedom-studio-manual-4.7.2-2019-08-1.pdf
 
 https://gill.net.in/posts/reverse-engineering-a-usb-device-with-rust/
 
 
-
-Continous29
-[2020-10-27T06:05:45Z DEBUG ptouch::printer] Raw status code: [80, 20, 42, 34, 38, 30, 0, 0, 0, 0, 1D, A, 0, 0, 14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]
-[2020-10-27T06:05:45Z DEBUG ptouch::printer] Parsed Status struct: Status { model: QL800, error: UnknownError(0), media: Some(Continuous(Continuous29)), mode: 0, status_type: ReplyToRequest, phase: Receiving, notification: NotAvailable }
-
-Continous62
-[2020-10-27T05:58:53Z DEBUG ptouch::printer] Raw status code: [80, 20, 42, 34, 38, 30, 0, 0, 0, 0, 3E, A, 0, 0, 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]
-[2020-10-27T05:58:53Z DEBUG ptouch::printer] Parsed Status struct: Status { model: QL800, error: UnknownError(0), media: Some(Continuous(Continuous62)), mode: 0, status_type: ReplyToRequest, phase: Receiving, notification: NotAvailable }
-
-Continuous62 Two-Color
-[2020-10-27T05:59:55Z DEBUG ptouch::printer] Raw status code: [80, 20, 42, 34, 38, 30, 0, 0, 0, 0, 3E, A, 0, 0, 23, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 81, 0, 0, 0, 0, 0, 0]
-[2020-10-27T05:59:55Z DEBUG ptouch::printer] Parsed Status struct: Status { model: QL800, error: UnknownError(0), media: Some(Continuous(Continuous62)), mode: 0, status_type: ReplyToRequest, phase: Receiving, notification: NotAvailable }
-
-DieCut62x100
-[2020-10-27T06:02:50Z DEBUG ptouch::printer] Raw status code: [80, 20, 42, 34, 38, 30, 0, 0, 0, 0, 3E, B, 0, 0, 3, 0, 0, 1D, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]
-[2020-10-27T06:02:50Z DEBUG ptouch::printer] Parsed Status struct: Status { model: QL800, error: UnknownError(0), media: Some(DieCut(DieCut62x29)), mode: 0, status_type: ReplyToRequest, phase: Receiving, notification: NotAvailable }
-
-DieCut29x90
-[2020-10-27T06:07:59Z DEBUG ptouch::printer] Raw status code: [80, 20, 42, 34, 38, 30, 0, 0, 0, 0, 1D, B, 0, 0, 1, 0, 0, 5A, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]
-[2020-10-27T06:07:59Z DEBUG ptouch::printer] Parsed Status struct: Status { model: QL800, error: UnknownError(0), media: Some(DieCut(DieCut29x90)), mode: 0, status_type: ReplyToRequest, phase: Receiving, notification: NotAvailable }
-
-DieCut29x42
-[2020-10-27T06:12:45Z DEBUG ptouch::printer] Raw status code: [80, 20, 42, 34, 38, 30, 0, 0, 0, 0, 1D, B, 0, 0, 8, 0, 0, 2A, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]
-[2020-10-27T06:12:45Z DEBUG ptouch::printer] Parsed Status struct: Status { model: QL800, error: UnknownError(0), media: Some(DieCut(DieCut29x42)), mode: 0, status_type: ReplyToRequest, phase: Receiving, notification: NotAvailable }
-
-DieCut23x23
-[2020-10-27T06:14:31Z DEBUG ptouch::printer] Raw status code: [80, 20, 42, 34, 38, 30, 0, 0, 0, 0, 17, B, 0, 0, C, 0, 0, 17, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]
-[2020-10-27T06:14:31Z DEBUG ptouch::printer] Parsed Status struct: Status { model: QL800, error: UnknownError(0), media: Some(DieCut(DieCut23x23)), mode: 0, status_type: ReplyToRequest, phase: Receiving, notification: NotAvailable }
-
-No Media
-[2020-10-27T07:13:35Z DEBUG ptouch::printer] Raw status code: [80, 20, 42, 34, 38, 30, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]
-[2020-10-27T07:13:35Z DEBUG ptouch::printer] Parsed Status struct: Status { model: QL800, error: UnknownError(0), media: None, mode: 0, status_type: ReplyToRequest, phase: Receiving, notification: NotAvailable, id: 0 }
-
-Cover Open - No Media Installed
-[2020-10-27T07:15:59Z DEBUG ptouch::printer] Raw status code: [80, 20, 42, 34, 38, 30, 0, 0, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]
-[2020-10-27T07:15:59Z DEBUG ptouch::printer] Parsed Status struct: Status { model: QL800, error: UnknownError(4096), media: None, mode: 0, status_type: Error, phase: Receiving, notification: NotAvailable, id: 0 }
-
-Cover Open - Media Installed
-[2020-10-27T07:27:53Z DEBUG ptouch::printer] Raw status code: [80, 20, 42, 34, 38, 30, 0, 0, 0, 10, 3E, A, 0, 0, 15, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]
-[2020-10-27T07:27:53Z DEBUG ptouch::printer] Parsed Status struct: Status { model: QL800, error: CoverOpen, media: Some(Continuous(Continuous62)), mode: 0, status_type: Error, phase: Receiving, notification: NotAvailable, id: 21 }
-
-Cover Closed - Media Installed - Not Inserted to Feeding Slit
-[2020-10-27T07:30:06Z DEBUG ptouch::printer] Raw status code: [80, 20, 42, 34, 38, 30, 0, 0, 0, 0, 3E, A, 0, 0, 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]
-[2020-10-27T07:30:06Z DEBUG ptouch::printer] Parsed Status struct: Status { model: QL800, error: UnknownError(0), media: Some(Continuous(Continuous62)), mode: 0, status_type: ReplyToRequest, phase: Receiving, notification: NotAvailable, id: 21 }
+## License

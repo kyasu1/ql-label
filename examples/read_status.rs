@@ -23,7 +23,7 @@ fn main() {
     let config: Config = Config::new(Model::QL800, "000G0Z714634".to_string(), media)
         .high_resolution(true)
         .cut_at_end(true)
-        .set_color(false)
+        .two_colors(false)
         .enable_auto_cut(1);
 
     match Printer::new(config) {
