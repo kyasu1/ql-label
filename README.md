@@ -1,9 +1,10 @@
 # ptouch
 
-`ptouch` provides a printer driver for Brother P-Touch QL series label printers connected to USB ports. This allows programatically print out multiple labels represented by a struct implemnting `Iterator` trait. Each data is just a two dimensional array of Vec<Vec<u8>>, so it is easy to convert from any image formats. You can drive multiple printers at the same time.
+This crate provides a printer driver for Brother P-Touch QL series label printers connected to USB ports. It is possible to print out multiple programatically generated labels. Bunch of labels are represented by a struct implemnting `Iterator` trait which allows lazy generation. The label data is respresented as a two dimensional array of Vec<Vec<u8>>, conversion from another image formats can be easily done. This driver supports printing with multiple printers at a same time.
 
 ## Features
 
+- USB connection is supported.
 - Print multiple labels at once.
 - High resolution printing support.
 - Two colors printing support.
@@ -11,11 +12,9 @@
 
 ## Usage
 
-Only USB connection is supported in this crate. 
-
 ### Media Tape
 
-Choose a media tape whatever you want to use and install it in the printer, then declare the matching media enum.
+Choose a media tape whatever you want to use and install it in the printer, then specify the matching media.
 
 ```rust
 let media = ptouch::Media::Continous(ContinuousType::Continuous62);
@@ -25,7 +24,7 @@ Theare are two types of media tape, Continuous and DieCut, each one has several 
 
 ### Serial Number and Model
 
-You need the model type and the serial number of your printer to use. You can check them by insepcting your USB ports by `lsusb -v`, which will show something like follows, then note the `iProduct` and `iSerial` field values.
+You can inspect USB ports by `lsusb -v` which will show something like follows where `iProduct` and `iSerial` are what we need.
 
 ```
 Bus 001 Device 003: ID 04f9:209b Brother Industries, Ltd 
