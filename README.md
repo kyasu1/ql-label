@@ -107,6 +107,23 @@ The following models are tested by myself.
 
 Anothre printers listed in the `ptouch::Model` should also work but we might need to some tweeking.
 
+## Tools
+
+In the example, there is a small tool to read the printer status.
+
+```
+RUST_LOG=debug cargo run --example read_status
+```
+
+This will show something like follows.
+
+```
+[2020-10-27T06:05:45Z DEBUG ptouch::printer] Raw status code: [80, 20, 42, 34, 38, 30, 0, 0, 0, 0, 1D, A, 0, 0, 14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]
+[2020-10-27T06:05:45Z DEBUG ptouch::printer] Parsed Status struct: Status { model: QL800, error: UnknownError(0), media: Some(Continuous(Continuous29)), mode: 0, status_type: ReplyToRequest, phase: Receiving, notification: NotAvailable }
+```
+
+Some gathered data are saved in `printer_status.txt`.
+
 ## Todos
 
 - [] Better error handling and reporting, what to do when label ends ?

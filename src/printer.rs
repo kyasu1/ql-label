@@ -168,7 +168,7 @@ impl Printer {
     }
 
     fn write(&self, buf: Vec<u8>) -> Result<usize, Error> {
-        let timeout = Duration::from_secs(2);
+        let timeout = Duration::from_secs(10);
         let result = self
             .handle
             .write_bulk(self.endpoint_out.address, &buf, timeout);
@@ -177,8 +177,8 @@ impl Printer {
                 if n == buf.len() {
                     Ok(n)
                 } else {
-                    println!(
-                        "write error: bytes wrote {} != bytes supplied {}",
+                    debug!(
+                        "write error: bytes wrote {} != bytes supplied {}, possibly timeout ?",
                         n,
                         buf.len()
                     );
@@ -189,6 +189,10 @@ impl Printer {
         }
     }
 
+    /// Read printer status.
+    /// 
+    /// This method is convinent for inspection when a new media is added.
+    /// 
     pub fn check_status(&self) -> Result<Status, Error> {
         self.request_status()?;
         self.read_status()
@@ -239,13 +243,17 @@ impl Printer {
         self.config.media.set_media(buf, true);
     }
 
+    /// Cancel printing
+    /// 
     pub fn cancel(&self) -> Result<(), Error> {
         let buf = self.initialize();
         self.write(buf)?;
         Ok(())
     }
 
-    /// Expects
+    /// Print labels
+    /// 
+    /// 
     pub fn print(&self, images: impl Iterator<Item = Matrix>) -> Result<(), Error> {
         self.request_status()?;
         match self.read_status() {
@@ -473,6 +481,19 @@ pub struct Config {
 }
 
 impl Config {
+    /// Initialize configuration data with default values.
+    /// 
+    /// This method receives model and media which can not be modified after initializaton.
+    /// 
+    /// # Example
+    /// 
+    /// 
+    /// ```
+    /// let media = Continuous(Continuous29);
+    /// let model = Modell:QL800;
+    /// let config = Config::new(model, media);
+    /// ```
+    /// 
     pub fn new(model: Model, serial: String, media: Media) -> Config {
         Config {
             model: model,
@@ -486,6 +507,7 @@ impl Config {
         }
     }
 
+    /// Enable auto cut per 
     pub fn enable_auto_cut(self, size: u8) -> Self {
         Config {
             auto_cut: AutoCut::Enabled(size),
