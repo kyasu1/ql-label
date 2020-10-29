@@ -1,86 +1,116 @@
-use image::GenericImage;
-use image::GenericImageView;
-use ptouch::{Config, ContinuousType, DieCutType, Media, Model, Printer};
+use image::{GenericImage, GenericImageView, ImageBuffer, Luma};
+use ptouch::{
+    step_filter_normal, Config, ContinuousType, DieCutType, Matrix, Media, Model, Printer,
+};
+use qrcode::QrCode;
 use std::path::Path;
 
 fn main() {
     env_logger::init();
 
-    // let file = "examples/rust-logo-256x256-blk.png";
-    // let file = "examples/test-text.png";
-    // let file = "examples/print-sample.png";
-    let file = "examples/label-mini.png";
-    // let file = "examples/PAWN_TICKET_JP.bmp";
-    // let file = "examples/label62x29.png";
+    // // let file = "examples/rust-logo-256x256-blk.png";
+    // // let file = "examples/test-text.png";
+    // // let file = "examples/print-sample.png";
+    // let file = "examples/label-mini.png";
+    // // let file = "examples/PAWN_TICKET_JP.bmp";
+    // // let file = "examples/label62x29.png";
 
-    let image: image::DynamicImage = image::open(file).unwrap();
-    let (_, length) = image.dimensions();
-    let gray = image.grayscale();
+    // let image: image::DynamicImage = image::open(file).unwrap();
+    // let (_, length) = image.dimensions();
+    // let gray = image.grayscale();
 
-    // canvas width is fixed 720 dots (90 bytes)
-    const WIDTH: u32 = 720;
+    // // canvas width is fixed 720 dots (90 bytes)
+    // const WIDTH: u32 = 720;
 
-    // let media = Media::DieCut(DieCutType::DieCut62x29);
+    // // let media = Media::DieCut(DieCutType::DieCut62x29);
+    // let media = Media::Continuous(ContinuousType::Continuous62);
+
+    // let mut buffer = image::DynamicImage::new_luma8(WIDTH, length);
+    // buffer.invert();
+    // buffer.copy_from(&gray, 0, 0).unwrap();
+    // buffer.invert();
+    // let bytes = buffer.to_bytes();
+
+    // let bw = step_filter(WIDTH, length, bytes);
+
     let media = Media::Continuous(ContinuousType::Continuous62);
 
-    let mut buffer = image::DynamicImage::new_luma8(WIDTH, length);
-    buffer.invert();
-    buffer.copy_from(&gray, 0, 0).unwrap();
-    buffer.invert();
-    let bytes = buffer.to_bytes();
+    let config: Config = Config::new(Model::QL800, "000G0Z714634".to_string(), media)
+        .high_resolution(true)
+        .cut_at_end(true)
+        .set_color(false)
+        // .enable_auto_cut(1);
+        .disable_auto_cut();
 
-    let bw = to_bw(WIDTH, length, bytes);
+    let label: Label2 = Label2 { counter: 0 };
 
-    if true {
-        let config: Config = Config::new(Model::QL800, "000G0Z714634".to_string(), media)
-            .high_resolution(false)
-            .cut_at_end(true)
-            .set_color(true)
-            .enable_auto_cut(1);
+    match Printer::new(config) {
+        Ok(printer) => {
+            // printer.print(vec![bw.clone()]).unwrap();
+            printer.print(label).unwrap();
+        }
+        Err(err) => panic!("Error at main {}", err),
+    }
+}
 
-        match Printer::new(config) {
-            Ok(printer) => {
-                printer.print(vec![bw.clone()]).unwrap();
-            }
-            Err(err) => panic!("Error at main {}", err),
+struct Label {
+    counter: u16,
+}
+
+impl Iterator for Label {
+    type Item = Matrix;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.counter < 2 {
+            let file = "examples/label-mini.png";
+            let image: image::DynamicImage = image::open(file).unwrap();
+            let (_, length) = image.dimensions();
+            let image = image.grayscale();
+
+            let mut buffer = image::DynamicImage::new_luma8(720, length);
+            buffer.invert();
+            buffer.copy_from(&image, 0, 0).unwrap();
+            buffer.invert();
+            let bytes = buffer.to_bytes();
+            let bw = step_filter_normal(80, length, bytes);
+            self.counter = self.counter + 1;
+            Some(bw)
+        } else {
+            None
         }
     }
 }
 
-//
-fn to_bw(width: u32, length: u32, bytes: Vec<u8>) -> Vec<Vec<u8>> {
-    // convert to black and white data
-    // this works fine for monochrome image in original
-    // TODO: Add support for a dithering algorithm to print phots
-    //
-    let mut bw: Vec<Vec<u8>> = Vec::new();
+struct Label2 {
+    counter: u16,
+}
 
-    for y in 0..length {
-        let mut buf: Vec<u8> = Vec::new();
-        for x in 0..(width / 8) {
-            let index = (1 + y) * width - (1 + x) * 8;
-            let mut tmp: u8 = 0x00;
-            for i in 0..8 {
-                let pixel = bytes[(index + i) as usize];
-                let value: u8 = if pixel > 80 { 1 } else { 0 };
-                tmp = tmp | (value << i);
-            }
-            buf.push(tmp);
+impl Iterator for Label2 {
+    type Item = Matrix;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.counter < 2 {
+            let length = 220;
+            let code = QrCode::new(b"01234567").unwrap();
+            let image: image::ImageBuffer<image::Luma<u8>, std::vec::Vec<u8>> = code
+                .render::<image::Luma<u8>>()
+                .quiet_zone(false)
+                .min_dimensions(100, 200)
+                .build();
+            let dimensions = image.dimensions();
+            println!("dimensions {:?}", dimensions);
+
+            let mut buffer =
+                image::DynamicImage::new_luma8(ptouch::NORMAL_PRINTER_WIDTH, length).to_luma();
+            // buffer.invert();
+            buffer.copy_from(&image, 0, 0).unwrap();
+            // buffer.invert();
+            let bytes = buffer.into_raw();
+            let bw = step_filter_normal(80, length, bytes);
+            self.counter = self.counter + 1;
+            Some(bw)
+        } else {
+            None
         }
-        /*
-        let x = width / 8;
-        let res = width % 8;
-        if res > 0 {
-            let index = (width - 8 - x * 8 + y * width) as usize;
-            let mut tmp: u8 = 0x00;
-            for i in 0..res {
-                tmp = tmp | (bytes[index + i as usize] as u8 & 0xF0u8) >> (7 - i);
-            }
-            buf.push(tmp);
-        }
-        */
-        bw.push(buf);
     }
-
-    bw
 }

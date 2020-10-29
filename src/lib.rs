@@ -1,35 +1,28 @@
-pub use crate::{
-    error::{Error, PrinterError},
-    media::{ContinuousType, DieCutType, Media},
-    model::Model,
-    printer::{Config, Printer, Status},
-};
-
-//
-// cargo run 1273 8349 000J9Z880381
-//
-// use rusb::{
-//     Context, Device, DeviceDescriptor, DeviceHandle, Direction, Error, Result, TransferType,
-//     UsbContext,
-// };
+//! P-Touch Printer Driver
+//!
+//! This crate provides a printer driver for Brother P-Touch QL series label printers.
+//!
+//! ```rust
+//! use ptouch;
+//!
+//! let media
+//! ```
 
 mod error;
 mod media;
 mod model;
 mod printer;
+mod utils;
 
-// /// This returns list of connected Brother P-Touch series printers.
-// pub fn list_printers() -> Vec<Printer> {
-//     unimplemented!()
-// }
+pub use crate::{
+    error::{Error, PrinterError},
+    media::{ContinuousType, DieCutType, Media},
+    model::Model,
+    printer::{Config, Printer, Status},
+    utils::{step_filter_normal, step_filter_wide},
+};
 
-// // ///
-// pub fn cancel_printing() -> Result<(), Error> {
-//     unimplemented!()
-// }
 
-// ///
-// ///
-// pub fn print() -> Result<(), Error> {
-//     unimplemented!()
-// }
+pub type Matrix = Vec<Vec<u8>>;
+pub const NORMAL_PRINTER_WIDTH: u32 = 720;
+pub const WIDE_PRINTER_WIDTH: u32 = 1296;

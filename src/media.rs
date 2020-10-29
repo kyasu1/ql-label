@@ -12,6 +12,7 @@ pub enum ContinuousType {
     Continuous50,
     Continuous54,
     Continuous62,
+    Continuous62Red,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -123,6 +124,18 @@ impl Media {
                     offset: None,
                 },
                 ContinuousType::Continuous62 => MediaSpec {
+                    id: 259,
+                    width: Width {
+                        mm: 62,
+                        left: 12,
+                        effective: 696,
+                        right: 12,
+                    },
+                    length: Length { mm: 0, dots: 0 },
+                    margin: MediaSize { mm: 1.5, dots: 18 },
+                    offset: None,
+                },
+                ContinuousType::Continuous62Red => MediaSpec {
                     id: 259,
                     width: Width {
                         mm: 62,
@@ -352,7 +365,6 @@ impl Media {
         }
     }
     pub fn set_media(&self, buf: &mut Vec<u8>, qualiy: bool) {
-        // Can not see noticeable difference from the quality setting...
         let qualiry: u8 = if qualiy { 0b01000000 } else { 0b00000000 };
         let spec = self.spec();
         match self {
@@ -373,6 +385,7 @@ impl Media {
         let w = buf[10];
         let t = buf[11];
         let l = buf[17];
+        let c = buf[25];
 
         match t {
             0x0A => match w {
@@ -382,7 +395,11 @@ impl Media {
                 38 => Some(Self::Continuous(ContinuousType::Continuous38)),
                 50 => Some(Self::Continuous(ContinuousType::Continuous50)),
                 54 => Some(Self::Continuous(ContinuousType::Continuous54)),
-                62 => Some(Self::Continuous(ContinuousType::Continuous62)),
+                62 => match c {
+                    0x01 => Some(Self::Continuous(ContinuousType::Continuous62)),
+                    0x81 => Some(Self::Continuous(ContinuousType::Continuous62Red)),
+                    _ => None,
+                },
                 _ => None,
             },
             0x0B => match (w, l) {

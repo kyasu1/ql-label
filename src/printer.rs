@@ -1,4 +1,4 @@
-use log::{debug, error, info, warn};
+use log::{debug, info};
 use rusb::{Context, Device, DeviceDescriptor, DeviceHandle, Direction, TransferType, UsbContext};
 use std::time::Duration;
 
@@ -6,6 +6,7 @@ use crate::{
     error::{Error, PrinterError},
     media::Media,
     model::Model,
+    Matrix,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -25,7 +26,7 @@ pub struct Printer {
 
 impl Printer {
     pub fn new(config: Config) -> Result<Self, Error> {
-        rusb::set_log_level(rusb::LogLevel::Debug);
+        // rusb::set_log_level(rusb::LogLevel::Debug);
         match Context::new() {
             Ok(mut context) => {
                 match Self::open_device(
@@ -167,7 +168,7 @@ impl Printer {
     }
 
     fn write(&self, buf: Vec<u8>) -> Result<usize, Error> {
-        let timeout = Duration::from_secs(1);
+        let timeout = Duration::from_secs(2);
         let result = self
             .handle
             .write_bulk(self.endpoint_out.address, &buf, timeout);
@@ -188,7 +189,12 @@ impl Printer {
         }
     }
 
-    pub fn read_status(&self) -> Result<Status, Error> {
+    pub fn check_status(&self) -> Result<Status, Error> {
+        self.request_status()?;
+        self.read_status()
+    }
+
+    fn read_status(&self) -> Result<Status, Error> {
         let timeout = Duration::from_secs(1);
         let mut buf: [u8; 32] = [0x00; 32];
         let mut counter = 0;
@@ -233,50 +239,15 @@ impl Printer {
         self.config.media.set_media(buf, true);
     }
 
-    fn to_bw(width: u32, length: u32, bytes: Vec<u8>) -> Vec<Vec<u8>> {
-        // convert to black and white data
-        // this works fine for monochrome image in original
-        // TODO: Add support for a dithering algorithm to print phots
-        //
-        let mut bw: Vec<Vec<u8>> = Vec::new();
-        for y in 0..length {
-            let mut buf: Vec<u8> = Vec::new();
-            for x in 0..(width / 8) {
-                let index = (1 + y) * width - (1 + x) * 8;
-                let mut tmp: u8 = 0x00;
-                for i in 0..8 {
-                    let pixel = bytes[(index + i) as usize];
-                    let value: u8 = if pixel > 80 { 1 } else { 0 };
-                    tmp = tmp | (value << i);
-                }
-                buf.push(tmp);
-            }
-            /*
-            let x = width / 8;
-            let res = width % 8;
-            if res > 0 {
-                let index = (width - 8 - x * 8 + y * width) as usize;
-                let mut tmp: u8 = 0x00;
-                for i in 0..res {
-                    tmp = tmp | (bytes[index + i as usize] as u8 & 0xF0u8) >> (7 - i);
-                }
-                buf.push(tmp);
-            }
-            */
-            bw.push(buf);
-        }
-        bw
-    }
-
     pub fn cancel(&self) -> Result<(), Error> {
         let buf = self.initialize();
         self.write(buf)?;
         Ok(())
     }
 
-    pub fn print(&self, images: Vec<Vec<Vec<u8>>>) -> Result<(), Error> {
+    /// Expects
+    pub fn print(&self, images: impl Iterator<Item = Matrix>) -> Result<(), Error> {
         self.request_status()?;
-
         match self.read_status() {
             Ok(status) => {
                 status.check_media(self.config.media)?;
@@ -287,7 +258,7 @@ impl Printer {
         }
     }
 
-    fn print_label(&self, images: Vec<Vec<Vec<u8>>>) -> Result<(), Error> {
+    fn print_label(&self, images: impl Iterator<Item = Matrix>) -> Result<(), Error> {
         let mut preamble: Vec<u8> = self.initialize();
         preamble.append(&mut [0x1B, 0x69, 0x61, 0x01].to_vec()); // Set raster command mode
         preamble.append(&mut [0x1B, 0x69, 0x21, 0x00].to_vec()); // Set auto status notificatoin mode
@@ -300,8 +271,9 @@ impl Printer {
         }
 
         let mut start_flag: bool = true;
-        let mut iter = images.into_iter().peekable();
         let mut color = false;
+
+        let mut iter = images.into_iter().peekable();
 
         loop {
             let mut buf: Vec<u8> = Vec::new();
@@ -344,11 +316,10 @@ impl Printer {
                         }
                     } else {
                         for mut row in image {
-                           buf.append(&mut [0x67, 0x00, 90].to_vec());
-                           buf.append(&mut row);
-                        }                        
+                            buf.append(&mut [0x67, 0x00, 90].to_vec());
+                            buf.append(&mut row);
+                        }
                     }
-
 
                     if iter.peek().is_some() {
                         buf.push(0x0C); // FF : Print
@@ -367,9 +338,7 @@ impl Printer {
         Ok(())
     }
 
-    /// Request printer status. call this function once before printing.
-    ///
-    pub fn request_status(&self) -> Result<usize, Error> {
+    fn request_status(&self) -> Result<usize, Error> {
         let mut buf: Vec<u8> = self.initialize();
         buf.append(&mut [0x1b, 0x69, 0x53].to_vec());
         self.write(buf)
@@ -388,6 +357,7 @@ pub struct Status {
     status_type: StatusType,
     phase: Phase,
     notification: Notification,
+    id: u8,
 }
 
 impl Status {
@@ -400,12 +370,17 @@ impl Status {
             status_type: StatusType::from_code(buf[18]),
             phase: Phase::from_buf(buf),
             notification: Notification::from_code(buf[22]),
+            id: buf[14],
         }
     }
 
     pub fn check_media(self, media: Media) -> Result<(), Error> {
         if let Some(m) = self.media {
-            Ok(())
+            if m == media {
+                Ok(())
+            } else {
+                Err(Error::InvalidMedia(media))
+            }
         } else {
             Err(Error::InvalidMedia(media))
         }

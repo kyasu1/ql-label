@@ -59,21 +59,35 @@ pub enum PrinterError {
     #[error("Cover is open")]
     CoverOpen,
 
+    #[error("Media can not be fed")]
+    FeedMediaFail,
+
     #[error("System error")]
     SystemError,
 
     #[error("Unknown error")]
-    UnknownError(u16),
+    UnknownError((u8, u8)),
 }
 
 impl PrinterError {
     pub fn from_buf(buf: [u8; 32]) -> Self {
-        match buf[8] {
-            0x01 => Self::NoMedia,
-            0x02 => Self::EndOfMedia,
-            _ => match buf[9] {
-                0x01 => Self::InvalidMedia,
-                _ => Self::UnknownError(buf[8] as u16 + (buf[9] as u16) * 256u16),
+        let err_1 = buf[8];
+        let err_2 = buf[9];
+
+        match err_1 {
+            0b0000_0001 => Self::NoMedia,
+            0b0000_0010 => Self::EndOfMedia,
+            0b0000_0100 => Self::CutterJam,
+            0b0001_0000 => Self::PrinterInUse,
+            0b0010_0000 => Self::PrinterOffline,
+            _ => match err_2 {
+                0b0000_0001 => Self::InvalidMedia,
+                0b0000_0010 => Self::BufferFull,
+                0b0000_0100 => Self::CommunicationError,
+                0b0001_0000 => Self::CoverOpen,
+                0b0100_0000 => Self::FeedMediaFail,
+                0b1000_0000 => Self::SystemError,
+                _ => Self::UnknownError((err_1, err_2)),
             },
         }
     }
