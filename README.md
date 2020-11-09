@@ -160,3 +160,5 @@ https://gill.net.in/posts/reverse-engineering-a-usb-device-with-rust/
 
 
 ## License
+
+MIT

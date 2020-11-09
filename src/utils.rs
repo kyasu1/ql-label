@@ -26,7 +26,7 @@ fn step_filter(threashold: u8, width: u32, length: u32, bytes: Vec<u8>) -> Matri
             let mut tmp: u8 = 0x00;
             for i in 0..8 {
                 let pixel = bytes[(index + i) as usize];
-                let value: u8 = if pixel > threashold { 1 } else { 0 };
+                let value: u8 = if pixel > threashold { 0 } else { 1 };
                 tmp = tmp | (value << i);
             }
             buf.push(tmp);

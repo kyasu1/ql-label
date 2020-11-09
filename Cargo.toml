@@ -15,8 +15,10 @@ edition = "2018"
 
 [dependencies]
 rusb = "0.6.4"
-thiserror = "*"
+thiserror = "1.0"
 log = "0.4"
+
+[dev-dependencies]
 env_logger = "0.8"
 image = "0.23"
 qrcode = "0.12"
