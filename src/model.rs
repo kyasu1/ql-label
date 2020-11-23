@@ -40,7 +40,7 @@ impl Model {
     pub fn pid(&self) -> u16 {
         match self {
             Self::QL600 => 0x20C0,
-            Self::QL720NW => 0x20C0,
+            Self::QL720NW => 0x2044,
             Self::QL800 => 0x209b,
             Self::QL810W => 0x209c,
             Self::QL820NWB => 0x209d,
