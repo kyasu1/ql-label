@@ -336,6 +336,37 @@ impl Media {
         }
     }
 
+    fn from_id(id: u16) -> Option<Self> {
+        match id {
+            // Document says it is 0x4A but actual value seems to be 0x0A
+            257 => Some(Self::Continuous(ContinuousType::Continuous12)),
+            258 => Some(Self::Continuous(ContinuousType::Continuous29)),
+            264 => Some(Self::Continuous(ContinuousType::Continuous38)),
+            262 => Some(Self::Continuous(ContinuousType::Continuous50)),
+            261 => Some(Self::Continuous(ContinuousType::Continuous54)),
+            259 => Some(Self::Continuous(ContinuousType::Continuous62)),
+            //   0x81 => Some(Self::Continuous(ContinuousType::Continuous62Red)),
+            // Same as above, 0x0B not 0x4B
+            269 => Some(Self::DieCut(DieCutType::DieCut17x54)),
+            270 => Some(Self::DieCut(DieCutType::DieCut17x87)),
+            370 => Some(Self::DieCut(DieCutType::DieCut23x23)),
+            358 => Some(Self::DieCut(DieCutType::DieCut29x42)),
+            271 => Some(Self::DieCut(DieCutType::DieCut29x90)),
+            272 => Some(Self::DieCut(DieCutType::DieCut38x90)),
+            367 => Some(Self::DieCut(DieCutType::DieCut39x48)),
+            374 => Some(Self::DieCut(DieCutType::DieCut52x29)),
+            382 => Some(Self::DieCut(DieCutType::DieCut54x29)),
+            383 => Some(Self::DieCut(DieCutType::DieCut60x86)),
+            274 => Some(Self::DieCut(DieCutType::DieCut62x29)),
+            275 => Some(Self::DieCut(DieCutType::DieCut62x100)),
+            362 => Some(Self::DieCut(DieCutType::DieCut12Dia)),
+            363 => Some(Self::DieCut(DieCutType::DieCut24Dia)),
+            273 => Some(Self::DieCut(DieCutType::DieCut58Dia)),
+            _ => None,
+        }
+    }
+    
+
     pub fn get_default_feed_dots(&self) -> u16 {
         match self {
             Self::Continuous(_) => 35,
