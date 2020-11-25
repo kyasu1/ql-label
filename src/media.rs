@@ -60,7 +60,7 @@ struct MediaSpec {
 }
 
 impl Media {
-    fn spec(&self) -> MediaSpec {
+    pub fn spec(&self) -> MediaSpec {
         match self {
             Self::Continuous(t) => match t {
                 ContinuousType::Continuous12 => MediaSpec {
@@ -336,7 +336,7 @@ impl Media {
         }
     }
 
-    fn from_id(id: u16) -> Option<Self> {
+    pub fn from_id(id: u16) -> Option<Self> {
         match id {
             // Document says it is 0x4A but actual value seems to be 0x0A
             257 => Some(Self::Continuous(ContinuousType::Continuous12)),
