@@ -51,7 +51,7 @@ struct Length {
     dots: u32,
 }
 
-struct MediaSpec {
+pub struct MediaSpec {
     id: u16,
     width: Width,
     length: Length,
@@ -365,7 +365,6 @@ impl Media {
             _ => None,
         }
     }
-    
 
     pub fn get_default_feed_dots(&self) -> u16 {
         match self {
