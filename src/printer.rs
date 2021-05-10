@@ -1,4 +1,4 @@
-use log::{debug, info};
+use log::{debug, info, error};
 use rusb::{Context, Device, DeviceDescriptor, DeviceHandle, Direction, TransferType, UsbContext};
 use std::time::Duration;
 
@@ -35,7 +35,7 @@ impl Printer {
                     config.model.pid(),
                     config.serial.clone(),
                 ) {
-                    Some((mut device, device_desc, mut handle)) => {
+                    Ok((mut device, device_desc, mut handle)) => {
                         handle.reset()?;
 
                         let endpoint_in = match Self::find_endpoint(
@@ -82,7 +82,10 @@ impl Printer {
                             config,
                         })
                     }
-                    None => Err(Error::DeviceOffline),
+                    Err(err) => {
+                        debug!("{:?}", err);
+                        Err(Error::DeviceOffline)
+                    },
                 }
             }
             Err(err) => Err(Error::UsbError(err)),
@@ -94,46 +97,54 @@ impl Printer {
         vid: u16,
         pid: u16,
         serial: String,
-    ) -> Option<(Device<Context>, DeviceDescriptor, DeviceHandle<Context>)> {
-        let devices = match context.devices() {
-            Ok(d) => d,
-            Err(_) => return None,
-        };
+    ) -> Result<(Device<Context>, DeviceDescriptor, DeviceHandle<Context>), Error> {
+        let devices =  context.devices()?; 
+
         for device in devices.iter() {
             let device_desc = match device.device_descriptor() {
                 Ok(d) => d,
-                Err(_) => continue,
+                Err(err) => {
+                    debug!("{:?}", err);
+                    continue
+                },
             };
+            debug!("{:?}", device_desc);
+
             if device_desc.vendor_id() == vid && device_desc.product_id() == pid {
                 match device.open() {
                     Ok(handle) => {
                         let timeout = Duration::from_secs(1);
-                        let languages = match handle.read_languages(timeout) {
-                            Ok(l) => l,
-                            Err(_) => return None,
-                        };
+                        let languages =  handle.read_languages(timeout)?;
+
                         if languages.len() > 0 {
                             let language = languages[0];
                             match handle.read_serial_number_string(language, &device_desc, timeout)
                             {
                                 Ok(s) => {
                                     if s == serial {
-                                        return Some((device, device_desc, handle));
+                                        return Ok((device, device_desc, handle));
                                     } else {
                                         continue;
                                     }
                                 }
-                                Err(_) => continue,
+                                Err(err) => {
+                                    debug!("Failed to read serial number string: {:?}", err);
+                                    continue
+                                },
                             }
                         } else {
                             continue;
                         }
                     }
-                    Err(_) => continue,
+                    Err(err) => {
+                        debug!("Failed to open device: {:?}", err);
+                        continue
+                    },
                 }
             }
         }
-        None
+        debug!("No device match with this serial: {:?}", serial);
+        Err(Error::DeviceOffline)
     }
 
     fn find_endpoint(
