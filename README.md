@@ -1,6 +1,6 @@
 # ptouch
 
-This crate provides a printer driver for Brother P-Touch QL series label printers connected to USB ports. It is possible to print out multiple programatically generated labels. Bunch of labels are represented by a struct implemnting `Iterator` trait which allows lazy generation. The label data is respresented as a two dimensional array of Vec<Vec<u8>>, conversion from another image formats can be easily done. This driver supports printing with multiple printers at a same time.
+This crate provides raw printing capability for Brother P-Touch QL series label printers connected as USB device. It allows to print programatically generated label images. Bunch of labels are represented by a struct implemnting `Iterator` trait which allows lazy generation. The label data is respresented as a two dimensional array, Vec<Vec<u8>>, conversion from another image formats can be easily done. This driver supports printing with multiple printers at a same time.
 
 ## Features
 

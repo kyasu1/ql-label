@@ -16,10 +16,10 @@ pub enum Error {
     #[error("Received invalid response from printer")]
     InvalidResponse(usize),
 
-    #[error("Invalid confifuration parameter")]
+    #[error("Invalid configuration parameter")]
     InvalidConfig(String),
 
-    #[error("Invalid media is installed")]
+    #[error("Installed media is invalid")]
     InvalidMedia(Media),
 
     #[error("Status request return no response")]

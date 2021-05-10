@@ -1,5 +1,4 @@
-///　width must be match to the printer pins defined as
-///
+/// choose a step filter depending on the priter width.
 ///
 use crate::Matrix;
 
@@ -14,7 +13,7 @@ pub fn step_filter_wide(threashold: u8, length: u32, bytes: Vec<u8>) -> Matrix {
 fn step_filter(threashold: u8, width: u32, length: u32, bytes: Vec<u8>) -> Matrix {
     // convert to black and white data
     // threashold = 80 seems to work fine if original data is monochrome.
-    // TODO: Add support for a dithering algorithm to print phots
+    // TODO: Add support for a dithering algorithm to print photos
     //
     // width must be
     let mut bw: Vec<Vec<u8>> = Vec::new();
