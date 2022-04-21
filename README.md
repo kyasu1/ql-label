@@ -141,7 +141,7 @@ Add the current user to `plugdev` group.
 $ sudo gpasswd -a $USER plugdev
 ```
 
-Add a new rule for udev. Here the number of filename must be higher than 60 to apply its config(Wasted whole day to notice abouth that >.<).
+Add a new rule as `/etc/udev/udev/rules.d/65-ptouch.rules`. Here the number in filename must be higher than 60 to be effective.
 
 ```sh:/etc/udev/rules.d/65-ptouch.rules
 SUBSYSTEMS=="usb", ATTRS{idVendor}=="04f9", ATTRS{idProduct}=="209b|209c|209d", MODE="664", GROUP="plugdev"
@@ -152,6 +152,13 @@ Reload the rules.
 ```
 sudo udevadm trigger
 sudo udevadm control --reload-rules
+```
+
+Also if you are using Ubuntu 21.10, we need to install extra packages as follows.
+
+```
+sudo apt install linux-modules-extra-raspi
+sudo reboot
 ```
 
 https://static.dev.sifive.com/dev-tools/FreedomStudio/2019.08/freedom-studio-manual-4.7.2-2019-08-1.pdf
