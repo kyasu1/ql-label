@@ -1,26 +1,30 @@
 # ptouch
 
-This crate provides raw printing capability for Brother P-Touch QL series label printers connected as USB device. It allows to print programatically generated label images. Bunch of labels are represented by a struct implemnting `Iterator` trait which allows lazy generation. The label data is respresented as a two dimensional array, Vec<Vec<u8>>, conversion from another image formats can be easily done. This driver supports printing with multiple printers at a same time.
+This crate provides raster printing capability for Brother P-Touch QL series label printers connected as USB device.
+It allows to print programmatically generated label images.
+Bunch of labels are represented as a struct implemnting `Iterator` trait which allows lazy generation.
+The label data is represented as a two dimensional array, `Vec<Vec<u8>>`, conversion from other image formats can be easily done.
+This driver supports printing with multiple printers at a same time.
 
 ## Features
 
-- USB connection is supported.
-- Print multiple labels at once.
-- High resolution printing support.
-- Two colors printing support.
-- Support multiple printers on one computer.
+- [x] Support USB connection
+- [x] Print multiple labels at once.
+- [x] High resolution printing support.
+- [] Two colors printing support.
+- [x] Support multiple printers on one computer.
 
 ## Usage
 
 ### Media Tape
 
-Choose a media tape whatever you want to use and install it in the printer, then specify the matching media.
+Choose a media tape you want to use and install it in the printer, then specify the matching media.
 
 ```rust
-let media = ptouch::Media::Continous(ContinuousType::Continuous62);
+let media = ptouch::Media::Continuous(ContinuousType::Continuous62);
 ```
 
-Theare are two types of media tape, Continuous and DieCut, each one has several size variations. In this example we choose Continous tape with 62mm width.
+Theare are two types of media tape, Continuous and DieCut, each one has several size variations. In this example we choose Continuous tape with 62mm width.
 
 ### Serial Number and Model
 
@@ -44,7 +48,7 @@ Device Descriptor:
   iSerial                 3 000G0Z000000
 ```
 
-With those information we can intialize our configurations as follows.
+With these information we can initialize our configurations as follows.
 
 ```rust
 let config: Config = Config::new(Model::QL800, "000G0Z000000".to_string(), media)
@@ -94,7 +98,7 @@ match Printer::new(config) {
 
 If the configuration value is invalid the `new` function will return an error.
 
-Note: When sending a long label, at maximum it can be 1000mm long, rusb will timeout and casue error. 
+Note: When sending a long label, rusb will timeout and return error. The maximum length is around 1000mm for continuous labels.
 
 ## Supported Printers
 
@@ -104,7 +108,7 @@ The following models are tested by myself.
 - QL-800
 - QL-820NWB
 
-Anothre printers listed in the `ptouch::Model` should also work but we might need to some tweeking.
+Anothre printers listed in the `ptouch::Model` should also work but we might need to some tweaking.
 
 ## Tools
 

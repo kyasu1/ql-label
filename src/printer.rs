@@ -1,4 +1,4 @@
-use log::{debug, info, error};
+use log::{debug, info};
 use rusb::{Context, Device, DeviceDescriptor, DeviceHandle, Direction, TransferType, UsbContext};
 use std::time::Duration;
 
@@ -85,7 +85,7 @@ impl Printer {
                     Err(err) => {
                         debug!("{:?}", err);
                         Err(Error::DeviceOffline)
-                    },
+                    }
                 }
             }
             Err(err) => Err(Error::UsbError(err)),
@@ -98,15 +98,15 @@ impl Printer {
         pid: u16,
         serial: String,
     ) -> Result<(Device<Context>, DeviceDescriptor, DeviceHandle<Context>), Error> {
-        let devices =  context.devices()?; 
+        let devices = context.devices()?;
 
         for device in devices.iter() {
             let device_desc = match device.device_descriptor() {
                 Ok(d) => d,
                 Err(err) => {
                     debug!("{:?}", err);
-                    continue
-                },
+                    continue;
+                }
             };
             debug!("{:?}", device_desc);
 
@@ -114,7 +114,7 @@ impl Printer {
                 match device.open() {
                     Ok(handle) => {
                         let timeout = Duration::from_secs(1);
-                        let languages =  handle.read_languages(timeout)?;
+                        let languages = handle.read_languages(timeout)?;
 
                         if languages.len() > 0 {
                             let language = languages[0];
@@ -129,8 +129,8 @@ impl Printer {
                                 }
                                 Err(err) => {
                                     debug!("Failed to read serial number string: {:?}", err);
-                                    continue
-                                },
+                                    continue;
+                                }
                             }
                         } else {
                             continue;
@@ -138,8 +138,8 @@ impl Printer {
                     }
                     Err(err) => {
                         debug!("Failed to open device: {:?}", err);
-                        continue
-                    },
+                        continue;
+                    }
                 }
             }
         }
@@ -201,9 +201,9 @@ impl Printer {
     }
 
     /// Read printer status.
-    /// 
-    /// This method is convinent for inspection when a new media is added.
-    /// 
+    ///
+    /// This method is convenient for inspection when a new media is added.
+    ///
     pub fn check_status(&self) -> Result<Status, Error> {
         self.request_status()?;
         self.read_status()
@@ -255,7 +255,7 @@ impl Printer {
     }
 
     /// Cancel printing
-    /// 
+    ///
     pub fn cancel(&self) -> Result<(), Error> {
         let buf = self.initialize();
         self.write(buf)?;
@@ -263,8 +263,8 @@ impl Printer {
     }
 
     /// Print labels
-    /// 
-    /// 
+    ///
+    ///
     pub fn print(&self, images: impl Iterator<Item = Matrix>) -> Result<(), Error> {
         self.request_status()?;
         match self.read_status() {
@@ -281,7 +281,12 @@ impl Printer {
         let mut preamble: Vec<u8> = self.initialize();
         preamble.append(&mut [0x1B, 0x69, 0x61, 0x01].to_vec()); // Set raster command mode
         preamble.append(&mut [0x1B, 0x69, 0x21, 0x00].to_vec()); // Set auto status notificatoin mode
-        preamble.append(&mut [0x4D, 0x00].to_vec()); // Set to no compression mode
+                                                                 //
+        if self.config.compress {
+            preamble.append(&mut [0x4D, 0x02].to_vec()); // Set to pack bits compression mode
+        } else {
+            preamble.append(&mut [0x4D, 0x00].to_vec()); // Set to no compression mode
+        }
 
         // Apply config values
         match self.config.clone().build() {
@@ -334,9 +339,18 @@ impl Printer {
                             }
                         }
                     } else {
-                        for mut row in image {
-                            buf.append(&mut [0x67, 0x00, 90].to_vec());
-                            buf.append(&mut row);
+                        if self.config.compress {
+                            for row in image {
+                                let mut packed = Self::pack_bits(&row);
+                                let len = packed.len() as u8;
+                                buf.append(&mut [0x67, 0x00, len].to_vec());
+                                buf.append(&mut packed);
+                            }
+                        } else {
+                            for mut row in image {
+                                buf.append(&mut [0x67, 0x00, 90].to_vec());
+                                buf.append(&mut row);
+                            }
                         }
                     }
 
@@ -355,6 +369,44 @@ impl Printer {
             }
         }
         Ok(())
+    }
+
+    fn pack_bits(data: &[u8]) -> Vec<u8> {
+        let mut packed = Vec::new();
+        let mut i = 0;
+
+        while i < data.len() {
+            let mut run_length = 1;
+            let run_value = data[i];
+
+            while i + run_length < data.len()
+                && run_length < 90
+                && data[i + run_length] == run_value
+            {
+                run_length += 1;
+            }
+
+            if run_length > 1 && run_length <= 90 {
+                packed.push(-(run_length as i8 - 1) as i8 as u8);
+                packed.push(run_value);
+                i += run_length;
+            } else {
+                let mut literal_run = 1;
+                while i + literal_run < data.len()
+                    && literal_run < 90
+                    && (literal_run >= run_length
+                        || data[i + literal_run] != data[i + literal_run - run_length])
+                {
+                    literal_run += 1;
+                }
+
+                packed.push(literal_run as u8 - 1);
+                packed.extend_from_slice(&data[i..i + literal_run]);
+                i += literal_run;
+            }
+        }
+
+        packed
     }
 
     fn request_status(&self) -> Result<usize, Error> {
@@ -489,36 +541,38 @@ pub struct Config {
     cut_at_end: bool,
     high_resolution: bool,
     feed: u16,
+    compress: bool,
 }
 
 impl Config {
     /// Initialize configuration data with default values.
-    /// 
-    /// This method receives model and media which can not be modified after initializaton.
-    /// 
+    ///
+    /// This method receives model and media.  They are not modifiable after the initialization.
+    ///
     /// # Example
-    /// 
-    /// 
+    ///
+    ///
     /// ```
     /// let media = Continuous(Continuous29);
-    /// let model = Modell:QL800;
+    /// let model = Model:QL800;
     /// let config = Config::new(model, media);
     /// ```
-    /// 
+    ///
     pub fn new(model: Model, serial: String, media: Media) -> Config {
         Config {
-            model: model,
-            serial: serial,
-            media: media,
+            model,
+            serial,
+            media,
             auto_cut: AutoCut::Enabled(1),
             two_colors: false,
             cut_at_end: true,
             high_resolution: false,
             feed: media.get_default_feed_dots(),
+            compress: true,
         }
     }
 
-    /// Enable auto cut per 
+    /// Enable auto cut per
     pub fn enable_auto_cut(self, size: u8) -> Self {
         Config {
             auto_cut: AutoCut::Enabled(size),
@@ -553,6 +607,13 @@ impl Config {
 
     pub fn two_colors(self, two_colors: bool) -> Self {
         Config { two_colors, ..self }
+    }
+
+    pub fn enable_compress(self, flag: bool) -> Self {
+        Config {
+            compress: flag,
+            ..self
+        }
     }
 
     fn build(self) -> Result<Vec<u8>, Error> {
