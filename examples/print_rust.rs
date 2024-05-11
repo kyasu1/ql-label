@@ -19,7 +19,7 @@ fn main() {
 
     let media = Media::Continuous(ContinuousType::Continuous62);
 
-    let config: Config = Config::new(Model::QL800, "000G0Z714634".to_string(), media)
+    let config: Config = Config::new(Model::QL800, "000G2G844181".to_string(), media)
         .high_resolution(false)
         .cut_at_end(true)
         .two_colors(false)
