@@ -15,7 +15,7 @@ fn main() {
         TestLabelHighResMultipleQrCode,
     }
 
-    let option = PrintOption::TestLabelHighResMultipleQrCode;
+    let option = PrintOption::TestLabelHighRes;
 
     let media = Media::Continuous(ContinuousType::Continuous62);
 
@@ -23,7 +23,8 @@ fn main() {
         .high_resolution(false)
         .cut_at_end(true)
         .two_colors(false)
-        .enable_auto_cut(1);
+        .enable_auto_cut(1)
+        .compress(true);
     // .disable_auto_cut();
 
     match option {

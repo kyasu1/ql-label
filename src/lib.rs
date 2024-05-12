@@ -22,7 +22,6 @@ pub use crate::{
     utils::{step_filter_normal, step_filter_wide},
 };
 
-
 pub type Matrix = Vec<Vec<u8>>;
 pub const NORMAL_PRINTER_WIDTH: u32 = 720;
 pub const WIDE_PRINTER_WIDTH: u32 = 1296;

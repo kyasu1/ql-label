@@ -293,7 +293,7 @@ impl Printer {
             Ok(mut buf) => preamble.append(&mut buf),
             Err(err) => return Err(err),
         }
-
+        debug!("{:?}", self.config);
         let mut start_flag: bool = true;
         let mut color = false;
 
@@ -568,7 +568,7 @@ impl Config {
             cut_at_end: true,
             high_resolution: false,
             feed: media.get_default_feed_dots(),
-            compress: true,
+            compress: false,
         }
     }
 
@@ -609,7 +609,7 @@ impl Config {
         Config { two_colors, ..self }
     }
 
-    pub fn enable_compress(self, flag: bool) -> Self {
+    pub fn compress(self, flag: bool) -> Self {
         Config {
             compress: flag,
             ..self
