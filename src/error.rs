@@ -10,6 +10,9 @@ pub enum Error {
     #[error("Device is offline")]
     DeviceOffline,
 
+    #[error("Can't read device list, permission issue ?")]
+    DeviceListNotReadable,
+
     #[error("Device is missing endpoint")]
     MissingEndpoint,
 

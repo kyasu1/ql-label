@@ -100,6 +100,10 @@ impl Printer {
     ) -> Result<(Device<Context>, DeviceDescriptor, DeviceHandle<Context>), Error> {
         let devices = context.devices()?;
 
+        if devices.is_empty() {
+            debug!("Failed to read device list");
+            return Err(Error::DeviceListNotReadable);
+        }
         for device in devices.iter() {
             let device_desc = match device.device_descriptor() {
                 Ok(d) => d,
