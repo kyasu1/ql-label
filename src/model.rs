@@ -1,4 +1,4 @@
-use crate::media::Media;
+use std::str::FromStr;
 
 #[derive(Debug, Clone, Copy)]
 pub enum Model {
@@ -22,17 +22,32 @@ pub enum Model {
     QL1115NWB,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub struct InvalidPrinterName;
+
+impl FromStr for Model {
+    type Err = InvalidPrinterName;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "QL-720NW" => Ok(Self::QL720NW),
+            "QL-800" => Ok(Self::QL800),
+            "QL-820NW" => Ok(Self::QL820NWB),
+            _ => Err(InvalidPrinterName),
+        }
+    }
+}
 impl Model {
     pub fn from_code(code: u8) -> Self {
         match code {
-            0x47 => (Self::QL600),
-            0x37 => (Self::QL720NW),
-            0x38 => (Self::QL800),
-            0x39 => (Self::QL810W),
-            0x41 => (Self::QL820NWB),
-            0x43 => (Self::QL1100),
-            0x44 => (Self::QL1110NWB),
-            0x45 => (Self::QL1115NWB),
+            0x47 => Self::QL600,
+            0x37 => Self::QL720NW,
+            0x38 => Self::QL800,
+            0x39 => Self::QL810W,
+            0x41 => Self::QL820NWB,
+            0x43 => Self::QL1100,
+            0x44 => Self::QL1110NWB,
+            0x45 => Self::QL1115NWB,
             _ => panic!("Unknown model code {}", code),
         }
     }
