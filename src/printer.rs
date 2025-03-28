@@ -270,14 +270,25 @@ impl Printer {
     ///
     ///
     pub fn print(&self, images: impl Iterator<Item = Matrix>) -> Result<(), Error> {
-        self.request_status()?;
+        log::debug!("request get status");
+
+        let status = self.request_status()?;
+
+        log::debug!("printer status {:#?}", status);
+
         match self.read_status() {
             Ok(status) => {
+                log::debug!("check correct mediat installed");
                 status.check_media(self.config.media)?;
+
+                log::debug!("start printing labels");
                 self.print_label(images)?;
                 Ok(())
             }
-            Err(err) => Err(err),
+            Err(err) => {
+                log::debug!("print error {:?}", err);
+                Err(err)
+            }
         }
     }
 

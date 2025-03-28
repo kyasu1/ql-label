@@ -34,7 +34,7 @@ pub enum Error {
 
 #[derive(Error, Debug)]
 pub enum PrinterError {
-    // Following erros are read from printer status
+    // Following errors are read from printer status
     #[error("No media is installed")]
     NoMedia,
 
