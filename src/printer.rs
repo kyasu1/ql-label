@@ -9,6 +9,9 @@ use crate::{
     Matrix,
 };
 
+// Vendoer id of Brother Industries, Ltd
+const VENDOR_ID: u16 = 0x04f9;
+
 #[derive(Debug, Clone, Copy)]
 struct Endpoint {
     config: u8,
@@ -29,13 +32,8 @@ impl Printer {
         // rusb::set_log_level(rusb::LogLevel::Debug);
         match Context::new() {
             Ok(mut context) => {
-                match Self::open_device(
-                    &mut context,
-                    0x04F9,
-                    config.model.pid(),
-                    config.serial.clone(),
-                ) {
-                    Ok((mut device, device_desc, mut handle)) => {
+                match Self::open_device(&mut context, config.model.pid(), config.serial.clone()) {
+                    Ok((mut device, device_desc, handle)) => {
                         handle.reset()?;
 
                         let endpoint_in = match Self::find_endpoint(
@@ -65,12 +63,15 @@ impl Printer {
                         handle.set_auto_detach_kernel_driver(true)?;
                         let has_kernel_driver = match handle.kernel_driver_active(0) {
                             Ok(true) => {
-                                handle.detach_kernel_driver(0).ok();
+                                handle.detach_kernel_driver(endpoint_in.iface).ok();
+                                handle.detach_kernel_driver(endpoint_out.iface).ok();
                                 true
                             }
                             _ => false,
                         };
                         info!(" Kernel driver support is {}", has_kernel_driver);
+                        handle.detach_kernel_driver(endpoint_in.iface).ok();
+                        handle.detach_kernel_driver(endpoint_out.iface).ok();
                         handle.set_active_configuration(1)?;
                         handle.claim_interface(0)?;
                         handle.set_alternate_setting(0, 0)?;
@@ -94,7 +95,6 @@ impl Printer {
 
     fn open_device(
         context: &mut Context,
-        vid: u16,
         pid: u16,
         serial: String,
     ) -> Result<(Device<Context>, DeviceDescriptor, DeviceHandle<Context>), Error> {
@@ -108,13 +108,12 @@ impl Printer {
             let device_desc = match device.device_descriptor() {
                 Ok(d) => d,
                 Err(err) => {
-                    debug!("{:?}", err);
+                    debug!("{:#?}", err);
                     continue;
                 }
             };
-            debug!("{:?}", device_desc);
 
-            if device_desc.vendor_id() == vid && device_desc.product_id() == pid {
+            if device_desc.vendor_id() == VENDOR_ID && device_desc.product_id() == pid {
                 match device.open() {
                     Ok(handle) => {
                         let timeout = Duration::from_secs(1);
@@ -125,6 +124,7 @@ impl Printer {
                             match handle.read_serial_number_string(language, &device_desc, timeout)
                             {
                                 Ok(s) => {
+                                    debug!("Found a printer with the serial number {serial}");
                                     if s == serial {
                                         return Ok((device, device_desc, handle));
                                     } else {
@@ -182,7 +182,7 @@ impl Printer {
         None
     }
 
-    fn write(&self, buf: Vec<u8>) -> Result<usize, Error> {
+    fn write(&self, buf: Vec<u8>) -> Result<(), Error> {
         let timeout = Duration::from_secs(10);
         let result = self
             .handle
@@ -190,7 +190,11 @@ impl Printer {
         match result {
             Ok(n) => {
                 if n == buf.len() {
-                    Ok(n)
+                    debug!(
+                        "wrote {n} bytes to the endpoint {}",
+                        self.endpoint_out.address
+                    );
+                    Ok(())
                 } else {
                     debug!(
                         "write error: bytes wrote {} != bytes supplied {}, possibly timeout ?",
@@ -276,8 +280,7 @@ impl Printer {
     pub fn print(&self, images: impl Iterator<Item = Matrix>) -> Result<(), Error> {
         log::debug!("request get status");
 
-        let status = self.request_status()?;
-        log::debug!("printer status {}", status);
+        self.request_status()?;
 
         match self.read_status() {
             Ok(status) => {
@@ -428,7 +431,7 @@ impl Printer {
         packed
     }
 
-    fn request_status(&self) -> Result<usize, Error> {
+    fn request_status(&self) -> Result<(), Error> {
         let mut buf: Vec<u8> = self.initialize();
         buf.append(&mut [0x1b, 0x69, 0x53].to_vec());
         self.write(buf)

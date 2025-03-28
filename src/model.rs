@@ -33,6 +33,7 @@ impl FromStr for Model {
             "QL-720NW" => Ok(Self::QL720NW),
             "QL-800" => Ok(Self::QL800),
             "QL-820NW" => Ok(Self::QL820NWB),
+            "QL-820NWB" => Ok(Self::QL820NWB),
             _ => Err(InvalidPrinterName),
         }
     }
