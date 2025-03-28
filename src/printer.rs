@@ -218,6 +218,7 @@ impl Printer {
         let mut buf: [u8; 32] = [0x00; 32];
         let mut counter = 0;
 
+        debug!("reading from endpoint_in {:#?}", self.endpoint_in);
         while counter < 10 {
             match self
                 .handle
@@ -225,6 +226,8 @@ impl Printer {
             {
                 // TODO: Check the first 4bytes match to [0x80, 0x20, 0x42, 0x34]
                 // TODO: Check the error status
+                //
+                // buf is pouplated with 32 bytes of data
                 Ok(32) => {
                     let status = Status::from_buf(buf);
                     debug!("Raw status code: {:X?}", buf);
