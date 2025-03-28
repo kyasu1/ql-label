@@ -65,7 +65,7 @@ impl Printer {
                         handle.set_auto_detach_kernel_driver(true)?;
                         let has_kernel_driver = match handle.kernel_driver_active(0) {
                             Ok(true) => {
-                                handle.detach_kernel_driver(0).ok();
+                                // handle.detach_kernel_driver(0).ok();
                                 true
                             }
                             _ => false,
