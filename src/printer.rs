@@ -112,7 +112,7 @@ impl Printer {
                     continue;
                 }
             };
-
+            debug!("{} {}", device_desc.vendor_id(), device_desc.product_id());
             if device_desc.vendor_id() == VENDOR_ID && device_desc.product_id() == pid {
                 match device.open() {
                     Ok(handle) => {
@@ -124,8 +124,8 @@ impl Printer {
                             match handle.read_serial_number_string(language, &device_desc, timeout)
                             {
                                 Ok(s) => {
-                                    debug!("Found a printer with the serial number {serial}");
                                     if s == serial {
+                                        debug!("Found a printer with the serial number {serial}");
                                         return Ok((device, device_desc, handle));
                                     } else {
                                         continue;
