@@ -65,7 +65,7 @@ impl Printer {
                         handle.set_auto_detach_kernel_driver(true)?;
                         let has_kernel_driver = match handle.kernel_driver_active(0) {
                             Ok(true) => {
-                                // handle.detach_kernel_driver(0).ok();
+                                handle.detach_kernel_driver(0).ok();
                                 true
                             }
                             _ => false,
@@ -235,7 +235,8 @@ impl Printer {
                         std::thread::sleep(std::time::Duration::from_secs(1));
                     }
                 }
-                Ok(_) => {
+                Ok(x) => {
+                    debug!("Waiting {counter} {x}");
                     std::thread::sleep(std::time::Duration::from_secs(1));
                 }
                 Err(e) => return Err(Error::UsbError(e)),
@@ -273,8 +274,7 @@ impl Printer {
         log::debug!("request get status");
 
         let status = self.request_status()?;
-
-        log::debug!("printer status {:#?}", status);
+        log::debug!("printer status {}", status);
 
         match self.read_status() {
             Ok(status) => {
@@ -286,6 +286,7 @@ impl Printer {
                 Ok(())
             }
             Err(err) => {
+                log::debug!("Error when reading request status");
                 log::debug!("print error {:?}", err);
                 Err(err)
             }
