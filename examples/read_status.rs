@@ -18,8 +18,8 @@ fn main() {
     let pid: u16 = FromStr::from_str(args[2].as_ref()).unwrap(); // 8349
     let serial: String = FromStr::from_str(args[3].as_ref()).unwrap();
     */
-    // let media = Media::Continuous(ContinuousType::Continuous62);
-    let media = Media::DieCut(DieCutType::DieCut29x90);
+    let media = Media::Continuous(ContinuousType::Continuous62);
+    // let media = Media::DieCut(DieCutType::DieCut29x90);
 
     let config: Config = Config::new(Model::QL820NWB, "000L4G359687".to_string(), media)
         .high_resolution(true)

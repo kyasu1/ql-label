@@ -59,6 +59,16 @@ pub struct MediaSpec {
     offset: Option<MediaSize>,
 }
 
+impl MediaSpec {
+    pub fn width_mm(&self) -> u8 {
+        self.width.mm
+    }
+    
+    pub fn length_mm(&self) -> u8 {
+        self.length.mm
+    }
+}
+
 impl Media {
     pub fn spec(&self) -> MediaSpec {
         match self {
