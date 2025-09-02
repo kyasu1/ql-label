@@ -467,8 +467,11 @@ impl Printer {
                     if iter.peek().is_some() {
                         buf.push(0x0C); // FF : Print
                         self.write(buf)?;
-                        let status = self.read_status()?;
-                        debug!("the status after printing a page {:#?}", status);
+                        debug!("Sent print command, waiting for completion...");
+                        
+                        // 改善されたステータス待機（中間ページ）
+                        self.wait_for_print_completion()?;
+                        debug!("Page printed successfully");
                     } else {
                         buf.push(0x1A); // Control-Z : Print then Eject
                         self.write(buf)?;
