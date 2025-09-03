@@ -1,4 +1,4 @@
-use log::{debug, info, warn, error};
+use log::{debug, error, info, warn};
 use rusb::{Context, Device, DeviceDescriptor, DeviceHandle, Direction, TransferType, UsbContext};
 use std::time::Duration;
 
@@ -192,15 +192,20 @@ impl Printer {
         let base_timeout_secs = 5;
         let transfer_rate_bytes_per_sec = 1_000_000; // 1MB/s
         let safety_margin = 2.0;
-        
-        let data_dependent_timeout = (buf.len() as f64 / transfer_rate_bytes_per_sec as f64) * safety_margin;
+
+        let data_dependent_timeout =
+            (buf.len() as f64 / transfer_rate_bytes_per_sec as f64) * safety_margin;
         let total_timeout_secs = base_timeout_secs as f64 + data_dependent_timeout;
-        
+
         // 最小10秒、最大60秒の範囲でクランプ
         let timeout_secs = total_timeout_secs.max(10.0).min(60.0);
         let timeout = Duration::from_secs(timeout_secs as u64);
-        
-        debug!("USB transfer timeout set to {:.1}s for {} bytes", timeout_secs, buf.len());
+
+        debug!(
+            "USB transfer timeout set to {:.1}s for {} bytes",
+            timeout_secs,
+            buf.len()
+        );
         let result = self
             .handle
             .write_bulk(self.endpoint_out.address, &buf, timeout);
@@ -273,10 +278,10 @@ impl Printer {
         let mut attempts = 0;
         const MAX_ATTEMPTS: u32 = 100; // 約5秒のタイムアウト
 
-        info!("Monitoring print progress...");
+        debug!("Waiting for print completion...");
 
         loop {
-            let status = self.read_status_with_timeout(Duration::from_millis(100))?;
+            let status = self.read_status_with_timeout(Duration::from_millis(1000))?;
             debug!(
                 "Print completion check: status_type={:?}, phase={:?}, error={:?}",
                 status.status_type, status.phase, status.error
@@ -333,7 +338,11 @@ impl Printer {
 
             attempts += 1;
             if attempts >= MAX_ATTEMPTS {
-                error!("Print completion timed out after {} attempts ({}s)", attempts, attempts * 50 / 1000);
+                error!(
+                    "Print completion timed out after {} attempts ({}s)",
+                    attempts,
+                    attempts * 50 / 1000
+                );
                 return Err(Error::PrintTimeout);
             }
         }
@@ -571,15 +580,19 @@ impl Printer {
 
         // 重要な最適化: 90バイト超過時は非圧縮として91バイト返す
         if packed.len() > 90 {
-            warn!("Data compression ineffective, sending uncompressed ({} bytes)", data.len());
+            warn!(
+                "Data compression ineffective, sending uncompressed ({} bytes)",
+                data.len()
+            );
             let mut result = Vec::with_capacity(91);
             result.push(89); // 90-1 = 89（90バイトの非圧縮指示）
             result.extend_from_slice(data);
             result
         } else {
             debug!(
-                "Compression reduced data from {} to {} bytes ({:.1}% reduction)", 
-                data.len(), packed.len(), 
+                "Compression reduced data from {} to {} bytes ({:.1}% reduction)",
+                data.len(),
+                packed.len(),
                 (1.0 - packed.len() as f64 / data.len() as f64) * 100.0
             );
             packed
