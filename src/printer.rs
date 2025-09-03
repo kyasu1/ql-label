@@ -13,6 +13,7 @@ use crate::{
 const VENDOR_ID: u16 = 0x04f9;
 
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
 struct Endpoint {
     config: u8,
     iface: u8,
@@ -184,7 +185,22 @@ impl Printer {
     }
 
     fn write(&self, buf: Vec<u8>) -> Result<(), Error> {
-        let timeout = Duration::from_secs(3);
+        // 動的タイムアウト計算
+        // - ベースタイムアウト: 5秒
+        // - データサイズ依存: 1MB/sの転送速度を仮定
+        // - 安全マージン: 2倍
+        let base_timeout_secs = 5;
+        let transfer_rate_bytes_per_sec = 1_000_000; // 1MB/s
+        let safety_margin = 2.0;
+        
+        let data_dependent_timeout = (buf.len() as f64 / transfer_rate_bytes_per_sec as f64) * safety_margin;
+        let total_timeout_secs = base_timeout_secs as f64 + data_dependent_timeout;
+        
+        // 最小10秒、最大60秒の範囲でクランプ
+        let timeout_secs = total_timeout_secs.max(10.0).min(60.0);
+        let timeout = Duration::from_secs(timeout_secs as u64);
+        
+        debug!("USB write timeout: {:.1}s for {} bytes", timeout_secs, buf.len());
         let result = self
             .handle
             .write_bulk(self.endpoint_out.address, &buf, timeout);
@@ -256,27 +272,29 @@ impl Printer {
     fn wait_for_print_completion(&self) -> Result<(), Error> {
         let mut attempts = 0;
         const MAX_ATTEMPTS: u32 = 100; // 約5秒のタイムアウト
-        
+
         debug!("Waiting for print completion...");
-        
+
         loop {
             let status = self.read_status_with_timeout(Duration::from_millis(100))?;
-            debug!("Print completion check: status_type={:?}, phase={:?}, error={:?}", 
-                   status.status_type, status.phase, status.error);
-            
+            debug!(
+                "Print completion check: status_type={:?}, phase={:?}, error={:?}",
+                status.status_type, status.phase, status.error
+            );
+
             // エラー状態の即座検出
             if !status.error.is_no_error() {
                 debug!("Print error detected: {:?}", status.error);
                 return Err(Error::PrinterError(status.error));
             }
-            
+
             match (status.status_type, status.phase) {
                 // エラー状態の即座検出
                 (StatusType::Error, _) => {
                     debug!("Error status type detected");
                     return Err(Error::PrinterError(status.error));
                 }
-                
+
                 // 印刷完了 -> 受信待機への遷移を待つ
                 (StatusType::Completed, Phase::Printing) => {
                     debug!("Print completed, checking for transition to receiving state");
@@ -287,29 +305,32 @@ impl Printer {
                         debug!("Successfully transitioned to receiving state");
                         return Ok(());
                     }
-                    debug!("Still waiting for transition to receiving state, current phase: {:?}", final_status.phase);
+                    debug!(
+                        "Still waiting for transition to receiving state, current phase: {:?}",
+                        final_status.phase
+                    );
                 }
-                
+
                 // 既に受信状態に戻っている（即座完了）
                 (StatusType::PhaseChange, Phase::Receiving) => {
                     debug!("Already transitioned to receiving state");
                     return Ok(());
                 }
-                
+
                 // まだ印刷中
                 (StatusType::PhaseChange, Phase::Printing) => {
                     debug!("Still printing, continuing to wait");
                     // 短い待機で継続監視
                     std::thread::sleep(Duration::from_millis(50));
                 }
-                
+
                 // 予期しない状態
                 _ => {
                     debug!("Unexpected status during print completion: {:#?}", status);
                     std::thread::sleep(Duration::from_millis(100));
                 }
             }
-            
+
             attempts += 1;
             if attempts >= MAX_ATTEMPTS {
                 debug!("Print completion timeout after {} attempts", attempts);
@@ -468,7 +489,7 @@ impl Printer {
                         buf.push(0x0C); // FF : Print
                         self.write(buf)?;
                         debug!("Sent print command, waiting for completion...");
-                        
+
                         // 改善されたステータス待機（中間ページ）
                         self.wait_for_print_completion()?;
                         debug!("Page printed successfully");
@@ -476,11 +497,11 @@ impl Printer {
                         buf.push(0x1A); // Control-Z : Print then Eject
                         self.write(buf)?;
                         debug!("Sent eject command, waiting for completion...");
-                        
+
                         // 改善されたステータス待機
                         self.wait_for_print_completion()?;
                         debug!("Print job completed successfully");
-                        
+
                         self.invalidate()?;
                     }
                 }
@@ -647,6 +668,7 @@ mod tests {
 /// Status received from the printer encoded to Rust friendly type.
 ///
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct Status {
     model: Model,
     error: PrinterError,

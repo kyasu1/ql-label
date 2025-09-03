@@ -1,4 +1,4 @@
-use ptouch::{Config, ContinuousType, DieCutType, Media, Model, Printer};
+use ptouch::{Config, DieCutType, Media, Model, Printer};
 //
 // cargo run --example init
 //
