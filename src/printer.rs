@@ -1,4 +1,4 @@
-use log::{debug, info};
+use log::{debug, info, warn, error};
 use rusb::{Context, Device, DeviceDescriptor, DeviceHandle, Direction, TransferType, UsbContext};
 use std::time::Duration;
 
@@ -82,7 +82,7 @@ impl Printer {
                         })
                     }
                     Err(err) => {
-                        debug!("[{}:{}] {:?}", file!(), line!(), err);
+                        debug!("Device connection failed: {:?}", err);
                         Err(Error::DeviceOffline)
                     }
                 }
@@ -99,7 +99,7 @@ impl Printer {
         let devices = context.devices()?;
 
         if devices.is_empty() {
-            debug!("Failed to read device list");
+            warn!("Unable to enumerate USB devices");
             return Err(Error::DeviceListNotReadable);
         }
         for device in devices.iter() {
@@ -127,14 +127,14 @@ impl Printer {
                             {
                                 Ok(s) => {
                                     if s == serial {
-                                        debug!("Found a printer with the serial number {serial}");
+                                        info!("Connected to printer (serial: {})", serial);
                                         return Ok((device, device_desc, handle));
                                     } else {
                                         continue;
                                     }
                                 }
                                 Err(err) => {
-                                    debug!("Failed to read serial number string: {:?}", err);
+                                    debug!("Cannot read device serial number: {:?}", err);
                                     continue;
                                 }
                             }
@@ -143,13 +143,13 @@ impl Printer {
                         }
                     }
                     Err(err) => {
-                        debug!("Failed to open device: {:?}", err);
+                        debug!("Unable to open USB device: {:?}", err);
                         continue;
                     }
                 }
             }
         }
-        debug!("No device match with this serial: {:?}", serial);
+        error!("No printer found with serial number: {}", serial);
         Err(Error::DeviceOffline)
     }
 
@@ -200,7 +200,7 @@ impl Printer {
         let timeout_secs = total_timeout_secs.max(10.0).min(60.0);
         let timeout = Duration::from_secs(timeout_secs as u64);
         
-        debug!("USB write timeout: {:.1}s for {} bytes", timeout_secs, buf.len());
+        debug!("USB transfer timeout set to {:.1}s for {} bytes", timeout_secs, buf.len());
         let result = self
             .handle
             .write_bulk(self.endpoint_out.address, &buf, timeout);
@@ -208,13 +208,13 @@ impl Printer {
             Ok(n) => {
                 if n == buf.len() {
                     debug!(
-                        "wrote {n} bytes to the endpoint {}",
-                        self.endpoint_out.address
+                        "Successfully wrote {} bytes to endpoint {:#x}",
+                        n, self.endpoint_out.address
                     );
                     Ok(())
                 } else {
-                    debug!(
-                        "write error: bytes wrote {} != bytes supplied {}, possibly timeout ?",
+                    warn!(
+                        "USB write incomplete: {} of {} bytes transferred (possible timeout)",
                         n,
                         buf.len()
                     );
@@ -273,7 +273,7 @@ impl Printer {
         let mut attempts = 0;
         const MAX_ATTEMPTS: u32 = 100; // 約5秒のタイムアウト
 
-        debug!("Waiting for print completion...");
+        info!("Monitoring print progress...");
 
         loop {
             let status = self.read_status_with_timeout(Duration::from_millis(100))?;
@@ -284,25 +284,25 @@ impl Printer {
 
             // エラー状態の即座検出
             if !status.error.is_no_error() {
-                debug!("Print error detected: {:?}", status.error);
+                error!("Print operation failed: {:?}", status.error);
                 return Err(Error::PrinterError(status.error));
             }
 
             match (status.status_type, status.phase) {
                 // エラー状態の即座検出
                 (StatusType::Error, _) => {
-                    debug!("Error status type detected");
+                    error!("Printer reported error status");
                     return Err(Error::PrinterError(status.error));
                 }
 
                 // 印刷完了 -> 受信待機への遷移を待つ
                 (StatusType::Completed, Phase::Printing) => {
-                    debug!("Print completed, checking for transition to receiving state");
+                    info!("Print finished, verifying printer state");
                     // 完了後、受信状態への遷移を確認
                     std::thread::sleep(Duration::from_millis(100));
                     let final_status = self.read_status_with_timeout(Duration::from_millis(500))?;
                     if matches!(final_status.phase, Phase::Receiving) {
-                        debug!("Successfully transitioned to receiving state");
+                        info!("Print completed, printer ready for next job");
                         return Ok(());
                     }
                     debug!(
@@ -313,13 +313,13 @@ impl Printer {
 
                 // 既に受信状態に戻っている（即座完了）
                 (StatusType::PhaseChange, Phase::Receiving) => {
-                    debug!("Already transitioned to receiving state");
+                    info!("Printer ready (already in receiving state)");
                     return Ok(());
                 }
 
                 // まだ印刷中
                 (StatusType::PhaseChange, Phase::Printing) => {
-                    debug!("Still printing, continuing to wait");
+                    debug!("Print in progress, continuing to monitor");
                     // 短い待機で継続監視
                     std::thread::sleep(Duration::from_millis(50));
                 }
@@ -333,7 +333,7 @@ impl Printer {
 
             attempts += 1;
             if attempts >= MAX_ATTEMPTS {
-                debug!("Print completion timeout after {} attempts", attempts);
+                error!("Print completion timed out after {} attempts ({}s)", attempts, attempts * 50 / 1000);
                 return Err(Error::PrintTimeout);
             }
         }
@@ -388,22 +388,21 @@ impl Printer {
     ///
     ///
     pub fn print(&self, images: impl Iterator<Item = Matrix>) -> Result<(), Error> {
-        log::debug!("request get status");
+        info!("Requesting printer status before print job");
 
         self.request_status()?;
 
         match self.read_status() {
             Ok(status) => {
-                log::debug!("check correct mediat installed");
+                info!("Verifying correct media is installed");
                 status.check_media(self.config.media)?;
 
-                log::debug!("start printing labels");
+                info!("Starting print job");
                 self.print_label(images)?;
                 Ok(())
             }
             Err(err) => {
-                log::debug!("Error when reading request status");
-                log::debug!("print error {:?}", err);
+                error!("Failed to read printer status: {:?}", err);
                 Err(err)
             }
         }
@@ -488,19 +487,19 @@ impl Printer {
                     if iter.peek().is_some() {
                         buf.push(0x0C); // FF : Print
                         self.write(buf)?;
-                        debug!("Sent print command, waiting for completion...");
+                        info!("Print command sent, waiting for completion...");
 
                         // 改善されたステータス待機（中間ページ）
                         self.wait_for_print_completion()?;
-                        debug!("Page printed successfully");
+                        info!("Page printed successfully");
                     } else {
                         buf.push(0x1A); // Control-Z : Print then Eject
                         self.write(buf)?;
-                        debug!("Sent eject command, waiting for completion...");
+                        info!("Final print command sent, ejecting media...");
 
                         // 改善されたステータス待機
                         self.wait_for_print_completion()?;
-                        debug!("Print job completed successfully");
+                        info!("Print job completed successfully");
 
                         self.invalidate()?;
                     }
@@ -572,16 +571,16 @@ impl Printer {
 
         // 重要な最適化: 90バイト超過時は非圧縮として91バイト返す
         if packed.len() > 90 {
-            debug!("Compression ineffective, using uncompressed data");
+            warn!("Data compression ineffective, sending uncompressed ({} bytes)", data.len());
             let mut result = Vec::with_capacity(91);
             result.push(89); // 90-1 = 89（90バイトの非圧縮指示）
             result.extend_from_slice(data);
             result
         } else {
             debug!(
-                "Compression effective: {} -> {} bytes",
-                data.len(),
-                packed.len()
+                "Compression reduced data from {} to {} bytes ({:.1}% reduction)", 
+                data.len(), packed.len(), 
+                (1.0 - packed.len() as f64 / data.len() as f64) * 100.0
             );
             packed
         }
@@ -892,8 +891,8 @@ impl Config {
                 auto_cut_num = n;
             }
 
-            debug!("Various mode: {:X}", various_mode);
-            debug!("Auto cut num: {:X}", auto_cut_num);
+            debug!("Auto-cut mode configured: {:#04x}", various_mode);
+            debug!("Auto-cut frequency: {} pages", auto_cut_num);
 
             buf.append(&mut [0x1B, 0x69, 0x4D, various_mode].to_vec()); // ESC i M : Set various mode
             buf.append(&mut [0x1B, 0x69, 0x41, auto_cut_num].to_vec()); // ESC i A : Set auto cut number
@@ -914,7 +913,7 @@ impl Config {
                 expanded_mode = expanded_mode | 0b0100_0000;
             }
 
-            debug!("Expanded mode: {:X}", expanded_mode);
+            debug!("Print mode settings: {:#04x}", expanded_mode);
 
             buf.append(&mut [0x1B, 0x69, 0x4B, expanded_mode].to_vec()); // ESC i K : Set expanded mode
         }
