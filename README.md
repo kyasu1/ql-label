@@ -11,6 +11,7 @@ This driver supports printing with multiple printers at a same time.
 - [x] Support USB connection
 - [x] Print multiple labels at once.
 - [x] High resolution printing support.
+- [x] Improved print completion handling with smart status monitoring
 - [] Two colors printing support.
 - [x] Support multiple printers on one computer.
 
@@ -100,6 +101,18 @@ If the configuration value is invalid the `new` function will return an error.
 
 Note: When sending a long label, rusb will timeout and return error. The maximum length is around 1000mm for continuous labels.
 
+### Print Completion Monitoring
+
+The library now features improved print completion handling with adaptive status monitoring. When a print job is sent, the library:
+
+- Monitors printer status transitions intelligently
+- Detects errors immediately during printing
+- Waits for proper completion (Printing → Receiving state transition)
+- Provides detailed debug logging for troubleshooting
+- Includes timeout protection to prevent indefinite waiting
+
+This improvement reduces unnecessary waiting time and provides better error detection compared to the previous fixed retry approach.
+
 ## Supported Printers
 
 The following models are tested by myself. 
@@ -127,9 +140,28 @@ This will show something like follows.
 
 Some gathered data are saved in `printer_status.txt`.
 
+## Recent Improvements
+
+### v0.1.1 - Enhanced Print Completion Handling
+
+- **Smart Status Monitoring**: Replaced fixed 3-retry approach with adaptive status polling
+- **Improved Error Detection**: Immediate detection of printer errors during print jobs
+- **State Transition Verification**: Proper monitoring of Printing → Receiving state transitions
+- **Reduced Latency**: Optimized waiting times and eliminated unnecessary delays
+- **Enhanced Debugging**: More detailed logging for print job monitoring and troubleshooting
+
+### Error Handling Enhancements
+
+The library now includes enhanced error types for better debugging:
+
+- `PrintTimeout`: Triggered when print completion takes longer than expected
+- `UnexpectedPhase`: Indicates unexpected printer state transitions
+- `PrinterError`: Immediate detection of hardware-level errors (cover open, media issues, etc.)
+
 ## Todos
 
-- [] Better error handling and reporting, what to do when label ends ?
+- [x] Better error handling and reporting for print completion
+- [] Better error handling for when label ends
 - [] Binalization with dithering support
 - [] Binalization with two colors support
 

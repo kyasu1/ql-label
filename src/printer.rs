@@ -1,4 +1,4 @@
-use log::{debug, info};
+use log::{debug, error, info, warn};
 use rusb::{Context, Device, DeviceDescriptor, DeviceHandle, Direction, TransferType, UsbContext};
 use std::time::Duration;
 
@@ -9,7 +9,11 @@ use crate::{
     Matrix,
 };
 
+// Vendoer id of Brother Industries, Ltd
+const VENDOR_ID: u16 = 0x04f9;
+
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
 struct Endpoint {
     config: u8,
     iface: u8,
@@ -29,13 +33,8 @@ impl Printer {
         // rusb::set_log_level(rusb::LogLevel::Debug);
         match Context::new() {
             Ok(mut context) => {
-                match Self::open_device(
-                    &mut context,
-                    0x04F9,
-                    config.model.pid(),
-                    config.serial.clone(),
-                ) {
-                    Ok((mut device, device_desc, mut handle)) => {
+                match Self::open_device(&mut context, config.model.pid(), config.serial.clone()) {
+                    Ok((mut device, device_desc, handle)) => {
                         handle.reset()?;
 
                         let endpoint_in = match Self::find_endpoint(
@@ -83,7 +82,7 @@ impl Printer {
                         })
                     }
                     Err(err) => {
-                        debug!("{:?}", err);
+                        debug!("Device connection failed: {:?}", err);
                         Err(Error::DeviceOffline)
                     }
                 }
@@ -94,27 +93,29 @@ impl Printer {
 
     fn open_device(
         context: &mut Context,
-        vid: u16,
         pid: u16,
         serial: String,
     ) -> Result<(Device<Context>, DeviceDescriptor, DeviceHandle<Context>), Error> {
         let devices = context.devices()?;
 
         if devices.is_empty() {
-            debug!("Failed to read device list");
+            warn!("Unable to enumerate USB devices");
             return Err(Error::DeviceListNotReadable);
         }
         for device in devices.iter() {
             let device_desc = match device.device_descriptor() {
                 Ok(d) => d,
                 Err(err) => {
-                    debug!("{:?}", err);
+                    debug!("{:#?}", err);
                     continue;
                 }
             };
-            debug!("{:?}", device_desc);
-
-            if device_desc.vendor_id() == vid && device_desc.product_id() == pid {
+            debug!(
+                "vender_id: {:x},  product_id: {:x}",
+                device_desc.vendor_id(),
+                device_desc.product_id()
+            );
+            if device_desc.vendor_id() == VENDOR_ID && device_desc.product_id() == pid {
                 match device.open() {
                     Ok(handle) => {
                         let timeout = Duration::from_secs(1);
@@ -126,13 +127,14 @@ impl Printer {
                             {
                                 Ok(s) => {
                                     if s == serial {
+                                        info!("Connected to printer (serial: {})", serial);
                                         return Ok((device, device_desc, handle));
                                     } else {
                                         continue;
                                     }
                                 }
                                 Err(err) => {
-                                    debug!("Failed to read serial number string: {:?}", err);
+                                    debug!("Cannot read device serial number: {:?}", err);
                                     continue;
                                 }
                             }
@@ -141,13 +143,13 @@ impl Printer {
                         }
                     }
                     Err(err) => {
-                        debug!("Failed to open device: {:?}", err);
+                        debug!("Unable to open USB device: {:?}", err);
                         continue;
                     }
                 }
             }
         }
-        debug!("No device match with this serial: {:?}", serial);
+        error!("No printer found with serial number: {}", serial);
         Err(Error::DeviceOffline)
     }
 
@@ -182,18 +184,42 @@ impl Printer {
         None
     }
 
-    fn write(&self, buf: Vec<u8>) -> Result<usize, Error> {
-        let timeout = Duration::from_secs(10);
+    fn write(&self, buf: Vec<u8>) -> Result<(), Error> {
+        // 動的タイムアウト計算
+        // - ベースタイムアウト: 5秒
+        // - データサイズ依存: 1MB/sの転送速度を仮定
+        // - 安全マージン: 2倍
+        let base_timeout_secs = 5;
+        let transfer_rate_bytes_per_sec = 1_000_000; // 1MB/s
+        let safety_margin = 2.0;
+
+        let data_dependent_timeout =
+            (buf.len() as f64 / transfer_rate_bytes_per_sec as f64) * safety_margin;
+        let total_timeout_secs = base_timeout_secs as f64 + data_dependent_timeout;
+
+        // 最小10秒、最大60秒の範囲でクランプ
+        let timeout_secs = total_timeout_secs.max(10.0).min(60.0);
+        let timeout = Duration::from_secs(timeout_secs as u64);
+
+        debug!(
+            "USB transfer timeout set to {:.1}s for {} bytes",
+            timeout_secs,
+            buf.len()
+        );
         let result = self
             .handle
             .write_bulk(self.endpoint_out.address, &buf, timeout);
         match result {
             Ok(n) => {
                 if n == buf.len() {
-                    Ok(n)
-                } else {
                     debug!(
-                        "write error: bytes wrote {} != bytes supplied {}, possibly timeout ?",
+                        "Successfully wrote {} bytes to endpoint {:#x}",
+                        n, self.endpoint_out.address
+                    );
+                    Ok(())
+                } else {
+                    warn!(
+                        "USB write incomplete: {} of {} bytes transferred (possible timeout)",
                         n,
                         buf.len()
                     );
@@ -214,35 +240,112 @@ impl Printer {
     }
 
     fn read_status(&self) -> Result<Status, Error> {
-        let timeout = Duration::from_secs(1);
+        self.read_status_with_timeout(Duration::from_millis(1000))
+    }
+
+    fn read_status_with_timeout(&self, timeout: Duration) -> Result<Status, Error> {
         let mut buf: [u8; 32] = [0x00; 32];
         let mut counter = 0;
 
-        while counter < 10 {
+        debug!("reading from endpoint_in {:#?}", self.endpoint_in);
+        while counter < 100000 {
             match self
                 .handle
                 .read_bulk(self.endpoint_in.address, &mut buf, timeout)
             {
                 // TODO: Check the first 4bytes match to [0x80, 0x20, 0x42, 0x34]
                 // TODO: Check the error status
+                //
+                // buf is pouplated with 32 bytes of data
                 Ok(32) => {
                     let status = Status::from_buf(buf);
                     debug!("Raw status code: {:X?}", buf);
                     debug!("Parsed Status struct: {:?}", status);
-                    if status.phase == Phase::Receiving {
-                        return Ok(status);
-                    } else {
-                        std::thread::sleep(std::time::Duration::from_secs(1));
-                    }
+                    return Ok(status);
                 }
-                Ok(_) => {
-                    std::thread::sleep(std::time::Duration::from_secs(1));
+                Ok(x) => {
+                    debug!("Waiting {counter} {x}");
+                    std::thread::sleep(std::time::Duration::from_millis(50));
                 }
                 Err(e) => return Err(Error::UsbError(e)),
             };
             counter = counter + 1;
         }
         Err(Error::ReadStatusTimeout)
+    }
+
+    fn wait_for_print_completion(&self) -> Result<(), Error> {
+        let mut attempts = 0;
+        const MAX_ATTEMPTS: u32 = 100; // 約5秒のタイムアウト
+
+        debug!("Waiting for print completion...");
+
+        loop {
+            let status = self.read_status_with_timeout(Duration::from_millis(1000))?;
+            debug!(
+                "Print completion check: status_type={:?}, phase={:?}, error={:?}",
+                status.status_type, status.phase, status.error
+            );
+
+            // エラー状態の即座検出
+            if !status.error.is_no_error() {
+                error!("Print operation failed: {:?}", status.error);
+                return Err(Error::PrinterError(status.error));
+            }
+
+            match (status.status_type, status.phase) {
+                // エラー状態の即座検出
+                (StatusType::Error, _) => {
+                    error!("Printer reported error status");
+                    return Err(Error::PrinterError(status.error));
+                }
+
+                // 印刷完了 -> 受信待機への遷移を待つ
+                (StatusType::Completed, Phase::Printing) => {
+                    info!("Print finished, verifying printer state");
+                    // 完了後、受信状態への遷移を確認
+                    std::thread::sleep(Duration::from_millis(100));
+                    let final_status = self.read_status_with_timeout(Duration::from_millis(500))?;
+                    if matches!(final_status.phase, Phase::Receiving) {
+                        info!("Print completed, printer ready for next job");
+                        return Ok(());
+                    }
+                    debug!(
+                        "Still waiting for transition to receiving state, current phase: {:?}",
+                        final_status.phase
+                    );
+                }
+
+                // 既に受信状態に戻っている（即座完了）
+                (StatusType::PhaseChange, Phase::Receiving) => {
+                    info!("Printer ready (already in receiving state)");
+                    return Ok(());
+                }
+
+                // まだ印刷中
+                (StatusType::PhaseChange, Phase::Printing) => {
+                    debug!("Print in progress, continuing to monitor");
+                    // 短い待機で継続監視
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+
+                // 予期しない状態
+                _ => {
+                    debug!("Unexpected status during print completion: {:#?}", status);
+                    std::thread::sleep(Duration::from_millis(100));
+                }
+            }
+
+            attempts += 1;
+            if attempts >= MAX_ATTEMPTS {
+                error!(
+                    "Print completion timed out after {} attempts ({}s)",
+                    attempts,
+                    attempts * 50 / 1000
+                );
+                return Err(Error::PrintTimeout);
+            }
+        }
     }
 
     fn initialize(&self) -> Vec<u8> {
@@ -252,10 +355,34 @@ impl Printer {
         buf
     }
 
-    fn set_media(&self, buf: &mut std::vec::Vec<u8>) {
-        buf.append(&mut [0x1B, 0x69, 0x7A].to_vec());
+    fn set_media(&self, buf: &mut std::vec::Vec<u8>, raster_count: u32) {
+        buf.extend_from_slice(&[0x1B, 0x69, 0x7A]); // ESC i z
 
-        self.config.media.set_media(buf, true);
+        // n1: 有効フラグ (用紙種類+幅+長さ+ラスター数)
+        let valid_flags = 0x02 | 0x04 | 0x08 | 0x40;
+        buf.push(valid_flags);
+
+        // n2: 用紙種類 (長尺:0x0A, ダイカット:0x0C)
+        let media_type = match self.config.media {
+            Media::Continuous(_) => 0x0A,
+            Media::DieCut(_) => 0x0B,
+        };
+        buf.push(media_type);
+
+        // n3, n4: 用紙幅・長さ (mm)
+        let spec = self.config.media.spec();
+        buf.push(spec.width_mm());
+        buf.push(spec.length_mm());
+
+        // n5-n8: ラスター数 (リトルエンディアン)
+        let raster_bytes = raster_count.to_le_bytes();
+        buf.extend_from_slice(&raster_bytes);
+
+        // n9: 先頭ページフラグ (0=先頭ページ)
+        buf.push(0x00);
+
+        // n10: 固定値
+        buf.push(0x00);
     }
 
     /// Cancel printing
@@ -270,14 +397,23 @@ impl Printer {
     ///
     ///
     pub fn print(&self, images: impl Iterator<Item = Matrix>) -> Result<(), Error> {
+        info!("Requesting printer status before print job");
+
         self.request_status()?;
+
         match self.read_status() {
             Ok(status) => {
+                info!("Verifying correct media is installed");
                 status.check_media(self.config.media)?;
+
+                info!("Starting print job");
                 self.print_label(images)?;
                 Ok(())
             }
-            Err(err) => Err(err),
+            Err(err) => {
+                error!("Failed to read printer status: {:?}", err);
+                Err(err)
+            }
         }
     }
 
@@ -286,18 +422,20 @@ impl Printer {
         preamble.append(&mut [0x1B, 0x69, 0x61, 0x01].to_vec()); // Set raster command mode
         preamble.append(&mut [0x1B, 0x69, 0x21, 0x00].to_vec()); // Set auto status notificatoin mode
                                                                  //
+                                                                 // Apply config values
+        match self.config.clone().build() {
+            Ok(mut buf) => preamble.append(&mut buf),
+            Err(err) => return Err(err),
+        }
+
         if self.config.compress {
             preamble.append(&mut [0x4D, 0x02].to_vec()); // Set to pack bits compression mode
         } else {
             preamble.append(&mut [0x4D, 0x00].to_vec()); // Set to no compression mode
         }
 
-        // Apply config values
-        match self.config.clone().build() {
-            Ok(mut buf) => preamble.append(&mut buf),
-            Err(err) => return Err(err),
-        }
         debug!("{:?}", self.config);
+
         let mut start_flag: bool = true;
         let mut color = false;
 
@@ -313,15 +451,12 @@ impl Printer {
                     }
 
                     // ESC i z 印刷情報司令
-                    self.set_media(&mut buf);
-                    // Set number of raster lines
-                    let len: [u8; 4] = if self.config.two_colors {
-                        ((image.len() / 2) as u32).to_le_bytes()
+                    let raster_count = if self.config.two_colors {
+                        (image.len() / 2) as u32
                     } else {
-                        ((image.len()) as u32).to_le_bytes()
+                        image.len() as u32
                     };
-
-                    buf.append(&mut len.to_vec());
+                    self.set_media(&mut buf, raster_count);
                     if start_flag {
                         buf.append(&mut [0x00, 0x00].to_vec());
                         start_flag = false;
@@ -361,10 +496,21 @@ impl Printer {
                     if iter.peek().is_some() {
                         buf.push(0x0C); // FF : Print
                         self.write(buf)?;
-                        self.read_status()?;
+                        info!("Print command sent, waiting for completion...");
+
+                        // 改善されたステータス待機（中間ページ）
+                        self.wait_for_print_completion()?;
+                        info!("Page printed successfully");
                     } else {
                         buf.push(0x1A); // Control-Z : Print then Eject
                         self.write(buf)?;
+                        info!("Final print command sent, ejecting media...");
+
+                        // 改善されたステータス待機
+                        self.wait_for_print_completion()?;
+                        info!("Print job completed successfully");
+
+                        self.invalidate()?;
                     }
                 }
                 None => {
@@ -375,48 +521,158 @@ impl Printer {
         Ok(())
     }
 
+    /// TIFF PackBits圧縮アルゴリズム（Brother QL仕様準拠）
+    ///
+    /// 仕様:
+    /// - 同一データ連続：個数-1を負数で指定 + データ1バイト
+    /// - 異なるデータ連続：個数-1を正数で指定 + 全データ
+    /// - 90バイト超過時は非圧縮として91バイト送信
     fn pack_bits(data: &[u8]) -> Vec<u8> {
+        // 入力データが90バイト固定でない場合はそのまま返す
+        if data.len() != 90 {
+            return data.to_vec();
+        }
+
         let mut packed = Vec::new();
         let mut i = 0;
 
         while i < data.len() {
+            // Run-length encoding (RLE)のチェック
             let mut run_length = 1;
             let run_value = data[i];
 
+            // 同じ値の連続をカウント（最大128個まで）
             while i + run_length < data.len()
-                && run_length < 90
+                && run_length < 128
                 && data[i + run_length] == run_value
             {
                 run_length += 1;
             }
 
-            if run_length > 1 && run_length <= 90 {
-                packed.push(-(run_length as i8 - 1) as i8 as u8);
+            // RLEが効果的な場合（2個以上の連続）
+            if run_length >= 2 {
+                // 負数で圧縮指示: -(count-1)
+                packed.push((-(run_length as i8 - 1)) as u8);
                 packed.push(run_value);
                 i += run_length;
             } else {
-                let mut literal_run = 1;
-                while i + literal_run < data.len()
-                    && literal_run < 90
-                    && (literal_run >= run_length
-                        || data[i + literal_run] != data[i + literal_run - run_length])
-                {
-                    literal_run += 1;
+                // リテラル実行のチェック
+                let start_pos = i;
+                let mut literal_length = 1;
+
+                // リテラル実行の最適な長さを決定
+                while i + literal_length < data.len() && literal_length < 128 {
+                    // 次の位置で2個以上同じ値が続く場合は、ここでリテラル実行を終了
+                    if i + literal_length + 1 < data.len()
+                        && data[i + literal_length] == data[i + literal_length + 1]
+                    {
+                        break;
+                    }
+                    literal_length += 1;
                 }
 
-                packed.push(literal_run as u8 - 1);
-                packed.extend_from_slice(&data[i..i + literal_run]);
-                i += literal_run;
+                // リテラル実行: 正数で非圧縮指示
+                packed.push((literal_length - 1) as u8);
+                packed.extend_from_slice(&data[start_pos..start_pos + literal_length]);
+                i += literal_length;
             }
         }
 
-        packed
+        // 重要な最適化: 90バイト超過時は非圧縮として91バイト返す
+        if packed.len() > 90 {
+            warn!(
+                "Data compression ineffective, sending uncompressed ({} bytes)",
+                data.len()
+            );
+            let mut result = Vec::with_capacity(91);
+            result.push(89); // 90-1 = 89（90バイトの非圧縮指示）
+            result.extend_from_slice(data);
+            result
+        } else {
+            debug!(
+                "Compression reduced data from {} to {} bytes ({:.1}% reduction)",
+                data.len(),
+                packed.len(),
+                (1.0 - packed.len() as f64 / data.len() as f64) * 100.0
+            );
+            packed
+        }
     }
 
-    fn request_status(&self) -> Result<usize, Error> {
+    fn request_status(&self) -> Result<(), Error> {
         let mut buf: Vec<u8> = self.initialize();
         buf.append(&mut [0x1b, 0x69, 0x53].to_vec());
         self.write(buf)
+    }
+
+    fn invalidate(&self) -> Result<(), Error> {
+        let buf: Vec<u8> = self.initialize();
+        self.write(buf)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_pack_bits_compression() {
+        // テスト1: 効果的な圧縮（同一データ連続）
+        let all_zeros = vec![0u8; 90];
+        let compressed = Printer::pack_bits(&all_zeros);
+        println!(
+            "All zeros: {} -> {} bytes",
+            all_zeros.len(),
+            compressed.len()
+        );
+        assert!(compressed.len() < all_zeros.len(), "圧縮が効果的でない");
+
+        // テスト2: 非効果的な圧縮（ランダムデータ）
+        let random_data: Vec<u8> = (0..90).map(|i| (i * 37 + 17) as u8).collect();
+        let compressed_random = Printer::pack_bits(&random_data);
+        println!(
+            "Random data: {} -> {} bytes",
+            random_data.len(),
+            compressed_random.len()
+        );
+
+        // テスト3: 91バイト制限の確認
+        if compressed_random.len() > 90 {
+            println!("91バイト制限により非圧縮データが返される");
+            assert_eq!(compressed_random.len(), 91); // 89 + 90バイトの元データ
+            assert_eq!(compressed_random[0], 89); // 非圧縮指示
+        }
+
+        // テスト4: 混合パターン（部分的な圧縮効果）
+        let mut mixed_data = vec![0u8; 30];
+        mixed_data.extend(vec![255u8; 30]);
+        mixed_data.extend((0..30).map(|i| i as u8));
+        let compressed_mixed = Printer::pack_bits(&mixed_data);
+        println!(
+            "Mixed data: {} -> {} bytes",
+            mixed_data.len(),
+            compressed_mixed.len()
+        );
+    }
+
+    #[test]
+    fn test_pack_bits_edge_cases() {
+        // エッジケース1: 空のデータ
+        let empty_data = vec![];
+        let compressed_empty = Printer::pack_bits(&empty_data);
+        assert_eq!(compressed_empty, empty_data);
+
+        // エッジケース2: 90バイト以外のサイズ
+        let wrong_size = vec![42u8; 50];
+        let compressed_wrong = Printer::pack_bits(&wrong_size);
+        assert_eq!(compressed_wrong, wrong_size);
+
+        // エッジケース3: 単一バイトの繰り返し（最大圧縮）
+        let single_byte = vec![42u8; 90];
+        let compressed_single = Printer::pack_bits(&single_byte);
+        assert_eq!(compressed_single.len(), 2); // 長さ指示 + データ
+        assert_eq!(compressed_single[0], (-(90i8 - 1)) as u8); // -89
+        assert_eq!(compressed_single[1], 42);
     }
 }
 
@@ -424,6 +680,7 @@ impl Printer {
 /// Status received from the printer encoded to Rust friendly type.
 ///
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct Status {
     model: Model,
     error: PrinterError,
@@ -449,22 +706,26 @@ impl Status {
         }
     }
 
-    pub fn check_media(self, media: Media) -> Result<(), Error> {
-        if let Some(m) = self.media {
-            if m == media {
-                Ok(())
-            } else {
-                Err(Error::InvalidMedia(media))
+    pub fn check_media(self, expected_media: Media) -> Result<(), Error> {
+        match self.media {
+            Some(actual_media) => {
+                if actual_media == expected_media {
+                    Ok(())
+                } else {
+                    Err(Error::MediaMismatch {
+                        expected: expected_media,
+                        actual: actual_media,
+                    })
+                }
             }
-        } else {
-            Err(Error::InvalidMedia(media))
+            None => Err(Error::NoMediaInstalled),
         }
     }
 }
 
 // StatusType
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 enum StatusType {
     ReplyToRequest,
     Completed,
@@ -490,8 +751,8 @@ impl StatusType {
 }
 // Phase
 
-#[derive(Debug, PartialEq)]
-enum Phase {
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum Phase {
     Receiving,
     Printing,
     Waiting(u16),
@@ -643,8 +904,8 @@ impl Config {
                 auto_cut_num = n;
             }
 
-            debug!("Various mode: {:X}", various_mode);
-            debug!("Auto cut num: {:X}", auto_cut_num);
+            debug!("Auto-cut mode configured: {:#04x}", various_mode);
+            debug!("Auto-cut frequency: {} pages", auto_cut_num);
 
             buf.append(&mut [0x1B, 0x69, 0x4D, various_mode].to_vec()); // ESC i M : Set various mode
             buf.append(&mut [0x1B, 0x69, 0x41, auto_cut_num].to_vec()); // ESC i A : Set auto cut number
@@ -665,7 +926,7 @@ impl Config {
                 expanded_mode = expanded_mode | 0b0100_0000;
             }
 
-            debug!("Expanded mode: {:X}", expanded_mode);
+            debug!("Print mode settings: {:#04x}", expanded_mode);
 
             buf.append(&mut [0x1B, 0x69, 0x4B, expanded_mode].to_vec()); // ESC i K : Set expanded mode
         }

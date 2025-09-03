@@ -22,11 +22,20 @@ pub enum Error {
     #[error("Invalid configuration parameter")]
     InvalidConfig(String),
 
-    #[error("Installed media is invalid")]
-    InvalidMedia(Media),
+    #[error("No media is installed in the printer")]
+    NoMediaInstalled,
+
+    #[error("Media mismatch: expected {expected:?}, found {actual:?}")]
+    MediaMismatch { expected: Media, actual: Media },
 
     #[error("Status request return no response")]
     ReadStatusTimeout,
+
+    #[error("Print job timeout waiting for completion")]
+    PrintTimeout,
+
+    #[error("Unexpected printer phase: {0:?}")]
+    UnexpectedPhase(crate::printer::Phase),
 
     #[error(transparent)]
     PrinterError(PrinterError),
@@ -34,7 +43,7 @@ pub enum Error {
 
 #[derive(Error, Debug)]
 pub enum PrinterError {
-    // Following erros are read from printer status
+    // Following errors are read from printer status
     #[error("No media is installed")]
     NoMedia,
 
@@ -93,5 +102,9 @@ impl PrinterError {
                 _ => Self::UnknownError((err_1, err_2)),
             },
         }
+    }
+
+    pub fn is_no_error(&self) -> bool {
+        matches!(self, Self::UnknownError((0, 0)))
     }
 }
