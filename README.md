@@ -142,6 +142,11 @@ Some gathered data are saved in `printer_status.txt`.
 
 ## Recent Improvements
 
+### v0.1.2 - QL-800 Compression Support Fix
+
+- **QL-800 Compression Override**: Automatic disabling of compression mode for QL-800 model due to hardware limitations
+- **Warning Logging**: Added warning message when compression is requested for QL-800 but disabled automatically
+
 ### v0.1.1 - Enhanced Print Completion Handling
 
 - **Smart Status Monitoring**: Replaced fixed 3-retry approach with adaptive status polling

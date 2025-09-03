@@ -428,7 +428,15 @@ impl Printer {
             Err(err) => return Err(err),
         }
 
-        if self.config.compress {
+        // QL-800では圧縮モードがサポートされていないため、常に非圧縮とする
+        let use_compression = if matches!(self.config.model, Model::QL800) && self.config.compress {
+            warn!("QL-800 does not support compression mode, using uncompressed mode instead");
+            false
+        } else {
+            self.config.compress
+        };
+        
+        if use_compression {
             preamble.append(&mut [0x4D, 0x02].to_vec()); // Set to pack bits compression mode
         } else {
             preamble.append(&mut [0x4D, 0x00].to_vec()); // Set to no compression mode
@@ -478,7 +486,7 @@ impl Printer {
                             }
                         }
                     } else {
-                        if self.config.compress {
+                        if use_compression {
                             for row in image {
                                 let mut packed = Self::pack_bits(&row);
                                 let len = packed.len() as u8;
