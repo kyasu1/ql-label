@@ -1,4 +1,4 @@
-# ptouch
+# ql-label
 
 This crate provides raster printing capability for Brother P-Touch QL series label printers connected as USB device.
 It allows to print programmatically generated label images.
@@ -32,7 +32,7 @@ The samples show:
 Choose a media tape you want to use and install it in the printer, then specify the matching media.
 
 ```rust
-let media = ptouch::Media::Continuous(ContinuousType::Continuous62);
+let media = ql_label::Media::Continuous(ContinuousType::Continuous62);
 ```
 
 Theare are two types of media tape, Continuous and DieCut, each one has several size variations. In this example we choose Continuous tape with 62mm width.
@@ -113,12 +113,12 @@ let file = "examples/rust-logo.png";
 let image: image::DynamicImage = image::open(file).unwrap();
 let (_, length) = image.dimensions();
 let gray = image.grayscale();
-let mut buffer = image::DynamicImage::new_luma8(ptouch::WIDE_PRINTER_WIDTH, length);
+let mut buffer = image::DynamicImage::new_luma8(ql_label::WIDE_PRINTER_WIDTH, length);
 buffer.invert();
 buffer.copy_from(&gray, 0, 0).unwrap();
 buffer.invert();
 let bytes = buffer.to_bytes();
-let bw = ptouch::utils::step_filter_normal(80, length, bytes);
+let bw = ql_label::utils::step_filter_normal(80, length, bytes);
 ```
 
 #### Two-Color Image Data
@@ -129,12 +129,12 @@ For two-color printing, you can either:
 ```rust
 let rgb_img = image::open("image.png")?.to_rgb8();
 let (width, height) = rgb_img.dimensions();
-let two_color_data = ptouch::convert_rgb_to_two_color(width, height, rgb_img.as_raw())?;
+let two_color_data = ql_label::convert_rgb_to_two_color(width, height, rgb_img.as_raw())?;
 ```
 
 2. **Create TwoColorMatrix manually**:
 ```rust
-let two_color_data = ptouch::TwoColorMatrix::new(black_matrix, red_matrix)?;
+let two_color_data = ql_label::TwoColorMatrix::new(black_matrix, red_matrix)?;
 ```
 
 The color detection automatically identifies:
@@ -194,7 +194,7 @@ The following models are tested by myself.
 - QL-800
 - QL-820NWB
 
-Anothre printers listed in the `ptouch::Model` should also work but we might need to some tweaking.
+Another printers listed in the `ql_label::Model` should also work but we might need some tweaking.
 
 ## Tools
 
@@ -221,8 +221,8 @@ RUST_LOG=debug cargo run --example print_two_color image path/to/your/image.png
 This will show something like follows.
 
 ```
-[2020-10-27T06:05:45Z DEBUG ptouch::printer] Raw status code: [80, 20, 42, 34, 38, 30, 0, 0, 0, 0, 1D, A, 0, 0, 14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]
-[2020-10-27T06:05:45Z DEBUG ptouch::printer] Parsed Status struct: Status { model: QL800, error: UnknownError(0), media: Some(Continuous(Continuous29)), mode: 0, status_type: ReplyToRequest, phase: Receiving, notification: NotAvailable }
+[2020-10-27T06:05:45Z DEBUG ql_label::printer] Raw status code: [80, 20, 42, 34, 38, 30, 0, 0, 0, 0, 1D, A, 0, 0, 14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]
+[2020-10-27T06:05:45Z DEBUG ql_label::printer] Parsed Status struct: Status { model: QL800, error: UnknownError(0), media: Some(Continuous(Continuous29)), mode: 0, status_type: ReplyToRequest, phase: Receiving, notification: NotAvailable }
 ```
 
 Some gathered data are saved in `printer_status.txt`.

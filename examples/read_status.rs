@@ -1,4 +1,4 @@
-use ptouch::{Config, ContinuousType, Media, Model, Printer};
+use ql_label::{Config, ContinuousType, Media, Model, Printer};
 use std::env;
 
 fn main() {
