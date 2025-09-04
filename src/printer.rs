@@ -30,6 +30,27 @@ pub struct Printer {
 }
 
 impl Printer {
+    /// Create a new printer instance with the specified configuration.
+    ///
+    /// This constructor handles USB device enumeration, connection, and initialization.
+    /// It will search for a Brother P-Touch printer matching the model and serial number
+    /// specified in the configuration.
+    ///
+    /// # Arguments
+    /// * `config` - Printer configuration containing model, serial, media, and print settings
+    ///
+    /// # Returns
+    /// * `Ok(Printer)` - Successfully connected printer instance
+    /// * `Err(Error)` - Connection failed, device not found, or USB error
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use ptouch::{Config, Model, Media, ContinuousType, Printer};
+    /// let config = Config::new(Model::QL820NWB, "E8N117P02180".to_string(), 
+    ///                         Media::Continuous(ContinuousType::Continuous62));
+    /// let printer = Printer::new(config)?;
+    /// # Ok::<(), ptouch::Error>(())
+    /// ```
     pub fn new(config: Config) -> Result<Self, Error> {
         // rusb::set_log_level(rusb::LogLevel::Debug);
         match Context::new() {
@@ -91,6 +112,164 @@ impl Printer {
             Err(err) => Err(Error::UsbError(err)),
         }
     }
+
+    /// Cancel current print job and reset printer state.
+    ///
+    /// Sends an initialization command to cancel any ongoing print job
+    /// and reset the printer to a ready state.
+    ///
+    /// # Returns
+    /// * `Ok(())` - Cancel command sent successfully
+    /// * `Err(Error)` - Communication error
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use ptouch::{Config, Model, Media, ContinuousType, Printer};
+    /// # let config = Config::new(Model::QL820NWB, "serial".to_string(), 
+    /// #                         Media::Continuous(ContinuousType::Continuous62));
+    /// let printer = Printer::new(config)?;
+    /// printer.cancel()?; // Cancel any ongoing job
+    /// # Ok::<(), ptouch::Error>(())
+    /// ```
+    pub fn cancel(&self) -> Result<(), Error> {
+        let buf = self.initialize();
+        self.write(buf)?;
+        Ok(())
+    }
+
+    /// Read current printer status including media type, errors, and phase.
+    ///
+    /// This method is convenient for inspection when a new media is added
+    /// or to check for printer errors before starting a print job.
+    ///
+    /// # Returns
+    /// * `Ok(Status)` - Current printer status information
+    /// * `Err(Error)` - Communication error or timeout
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use ptouch::{Config, Model, Media, ContinuousType, Printer};
+    /// # let config = Config::new(Model::QL820NWB, "serial".to_string(), 
+    /// #                         Media::Continuous(ContinuousType::Continuous62));
+    /// let printer = Printer::new(config)?;
+    /// match printer.check_status() {
+    ///     Ok(status) => println!("Printer ready: {:?}", status),
+    ///     Err(e) => eprintln!("Printer error: {:?}", e),
+    /// }
+    /// # Ok::<(), ptouch::Error>(())
+    /// ```
+    pub fn check_status(&self) -> Result<Status, Error> {
+        self.request_status()?;
+        self.read_status()
+    }
+
+    /// Print single-color labels.
+    ///
+    /// This method prints labels using black ink only. For two-color printing,
+    /// use `print_two_color()` method instead.
+    ///
+    /// # Arguments
+    /// * `images` - Iterator of `Matrix` (`Vec<Vec<u8>>`) containing 1-bit bitmap data
+    ///
+    /// # Returns
+    /// * `Ok(())` - Print job completed successfully
+    /// * `Err(Error)` - Printer error, communication error, or media mismatch
+    ///
+    /// # Image Format
+    /// - Width: 720 pixels (90 bytes) for normal printers, 1296 pixels for wide printers
+    /// - Height: Variable, depends on label length
+    /// - Format: 1-bit bitmap packed into bytes (8 pixels per byte)
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use ptouch::{Config, Model, Media, ContinuousType, Printer, Matrix};
+    /// let config = Config::new(Model::QL820NWB, "serial".to_string(), 
+    ///                         Media::Continuous(ContinuousType::Continuous62));
+    /// let printer = Printer::new(config)?;
+    /// 
+    /// // Create simple black and white pattern
+    /// let image_data: Matrix = vec![vec![0xFF; 90]; 300]; // 300 lines of solid black
+    /// 
+    /// printer.print(vec![image_data].into_iter())?;
+    /// # Ok::<(), ptouch::Error>(())
+    /// ```
+    pub fn print(&self, images: impl Iterator<Item = Matrix>) -> Result<(), Error> {
+        info!("Requesting printer status before print job");
+
+        self.request_status()?;
+
+        match self.read_status() {
+            Ok(status) => {
+                info!("Verifying correct media is installed");
+                status.check_media(self.config.media)?;
+
+                info!("Starting print job");
+                self.print_label(images)?;
+                Ok(())
+            }
+            Err(err) => {
+                error!("Failed to read printer status: {:?}", err);
+                Err(err)
+            }
+        }
+    }
+
+    /// Print two-color labels using black and red colors.
+    ///
+    /// This method is specifically designed for QL-820NWB printers with
+    /// red/black tape installed. The configuration must have `two_colors(true)`
+    /// enabled for this method to work.
+    ///
+    /// # Arguments
+    /// * `images` - Iterator of `TwoColorMatrix` containing black and red image data
+    ///
+    /// # Returns
+    /// * `Ok(())` - Print job completed successfully
+    /// * `Err(Error)` - Printer error, communication error, or invalid configuration
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use ptouch::{Config, Model, Media, ContinuousType, Printer, TwoColorMatrix};
+    /// let config = Config::new(Model::QL820NWB, "serial".to_string(), 
+    ///                         Media::Continuous(ContinuousType::Continuous62Red))
+    ///     .two_colors(true);
+    /// let printer = Printer::new(config)?;
+    /// 
+    /// // Create two-color image data
+    /// let black_data = vec![vec![0u8; 90]; 300];
+    /// let red_data = vec![vec![0u8; 90]; 300];
+    /// let two_color = TwoColorMatrix::new(black_data, red_data)?;
+    /// 
+    /// printer.print_two_color(vec![two_color].into_iter())?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn print_two_color(&self, images: impl Iterator<Item = TwoColorMatrix>) -> Result<(), Error> {
+        if !self.config.two_colors {
+            return Err(Error::InvalidConfig("Two-color printing not enabled in config".to_string()));
+        }
+
+        info!("Requesting printer status before two-color print job");
+
+        self.request_status()?;
+
+        match self.read_status() {
+            Ok(status) => {
+                info!("Verifying correct media is installed");
+                status.check_media(self.config.media)?;
+
+                info!("Starting two-color print job");
+                let alternating_images = images.map(|two_color| two_color.to_alternating_matrix());
+                self.print_label(alternating_images)?;
+                Ok(())
+            }
+            Err(err) => {
+                error!("Failed to read printer status: {:?}", err);
+                Err(err)
+            }
+        }
+    }
+
+    // Private helper methods
 
     fn open_device(
         context: &mut Context,
@@ -229,32 +408,6 @@ impl Printer {
             }
             Err(e) => Err(Error::UsbError(e)),
         }
-    }
-
-    /// Read current printer status including media type, errors, and phase.
-    ///
-    /// This method is convenient for inspection when a new media is added
-    /// or to check for printer errors before starting a print job.
-    ///
-    /// # Returns
-    /// * `Ok(Status)` - Current printer status information
-    /// * `Err(Error)` - Communication error or timeout
-    ///
-    /// # Example
-    /// ```rust,no_run
-    /// # use ptouch::{Config, Model, Media, ContinuousType, Printer};
-    /// # let config = Config::new(Model::QL820NWB, "serial".to_string(), 
-    /// #                         Media::Continuous(ContinuousType::Continuous62));
-    /// let printer = Printer::new(config)?;
-    /// match printer.check_status() {
-    ///     Ok(status) => println!("Printer ready: {:?}", status),
-    ///     Err(e) => eprintln!("Printer error: {:?}", e),
-    /// }
-    /// # Ok::<(), ptouch::Error>(())
-    /// ```
-    pub fn check_status(&self) -> Result<Status, Error> {
-        self.request_status()?;
-        self.read_status()
     }
 
     fn read_status(&self) -> Result<Status, Error> {
@@ -401,136 +554,6 @@ impl Printer {
 
         // n10: 固定値
         buf.push(0x00);
-    }
-
-    /// Cancel current print job and reset printer state.
-    ///
-    /// Sends an initialization command to cancel any ongoing print job
-    /// and reset the printer to a ready state.
-    ///
-    /// # Returns
-    /// * `Ok(())` - Cancel command sent successfully
-    /// * `Err(Error)` - Communication error
-    ///
-    /// # Example
-    /// ```rust,no_run
-    /// # use ptouch::{Config, Model, Media, ContinuousType, Printer};
-    /// # let config = Config::new(Model::QL820NWB, "serial".to_string(), 
-    /// #                         Media::Continuous(ContinuousType::Continuous62));
-    /// let printer = Printer::new(config)?;
-    /// printer.cancel()?; // Cancel any ongoing job
-    /// # Ok::<(), ptouch::Error>(())
-    /// ```
-    pub fn cancel(&self) -> Result<(), Error> {
-        let buf = self.initialize();
-        self.write(buf)?;
-        Ok(())
-    }
-
-    /// Print two-color labels using black and red colors.
-    ///
-    /// This method is specifically designed for QL-820NWB printers with
-    /// red/black tape installed. The configuration must have `two_colors(true)`
-    /// enabled for this method to work.
-    ///
-    /// # Arguments
-    /// * `images` - Iterator of `TwoColorMatrix` containing black and red image data
-    ///
-    /// # Returns
-    /// * `Ok(())` - Print job completed successfully
-    /// * `Err(Error)` - Printer error, communication error, or invalid configuration
-    ///
-    /// # Example
-    /// ```rust,no_run
-    /// # use ptouch::{Config, Model, Media, ContinuousType, Printer, TwoColorMatrix};
-    /// let config = Config::new(Model::QL820NWB, "serial".to_string(), 
-    ///                         Media::Continuous(ContinuousType::Continuous62Red))
-    ///     .two_colors(true);
-    /// let printer = Printer::new(config)?;
-    /// 
-    /// // Create two-color image data
-    /// let black_data = vec![vec![0u8; 90]; 300];
-    /// let red_data = vec![vec![0u8; 90]; 300];
-    /// let two_color = TwoColorMatrix::new(black_data, red_data)?;
-    /// 
-    /// printer.print_two_color(vec![two_color].into_iter())?;
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    pub fn print_two_color(&self, images: impl Iterator<Item = TwoColorMatrix>) -> Result<(), Error> {
-        if !self.config.two_colors {
-            return Err(Error::InvalidConfig("Two-color printing not enabled in config".to_string()));
-        }
-
-        info!("Requesting printer status before two-color print job");
-
-        self.request_status()?;
-
-        match self.read_status() {
-            Ok(status) => {
-                info!("Verifying correct media is installed");
-                status.check_media(self.config.media)?;
-
-                info!("Starting two-color print job");
-                let alternating_images = images.map(|two_color| two_color.to_alternating_matrix());
-                self.print_label(alternating_images)?;
-                Ok(())
-            }
-            Err(err) => {
-                error!("Failed to read printer status: {:?}", err);
-                Err(err)
-            }
-        }
-    }
-
-    /// Print single-color labels.
-    ///
-    /// This method prints labels using black ink only. For two-color printing,
-    /// use `print_two_color()` method instead.
-    ///
-    /// # Arguments
-    /// * `images` - Iterator of `Matrix` (`Vec<Vec<u8>>`) containing 1-bit bitmap data
-    ///
-    /// # Returns
-    /// * `Ok(())` - Print job completed successfully
-    /// * `Err(Error)` - Printer error, communication error, or media mismatch
-    ///
-    /// # Image Format
-    /// - Width: 720 pixels (90 bytes) for normal printers, 1296 pixels for wide printers
-    /// - Height: Variable, depends on label length
-    /// - Format: 1-bit bitmap packed into bytes (8 pixels per byte)
-    ///
-    /// # Example
-    /// ```rust,no_run
-    /// # use ptouch::{Config, Model, Media, ContinuousType, Printer, Matrix};
-    /// let config = Config::new(Model::QL820NWB, "serial".to_string(), 
-    ///                         Media::Continuous(ContinuousType::Continuous62));
-    /// let printer = Printer::new(config)?;
-    /// 
-    /// // Create simple black and white pattern
-    /// let image_data: Matrix = vec![vec![0xFF; 90]; 300]; // 300 lines of solid black
-    /// 
-    /// printer.print(vec![image_data].into_iter())?;
-    /// # Ok::<(), ptouch::Error>(())
-    /// ```
-    pub fn print(&self, images: impl Iterator<Item = Matrix>) -> Result<(), Error> {
-        info!("Requesting printer status before print job");
-
-        self.request_status()?;
-
-        match self.read_status() {
-            Ok(status) => {
-                info!("Verifying correct media is installed");
-                status.check_media(self.config.media)?;
-
-                info!("Starting print job");
-                self.print_label(images)?;
-                Ok(())
-            }
-            Err(err) => {
-                error!("Failed to read printer status: {:?}", err);
-                Err(err)
-            }
-        }
     }
 
     fn print_label(&self, images: impl Iterator<Item = Matrix>) -> Result<(), Error> {
