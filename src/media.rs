@@ -34,11 +34,13 @@ pub enum DieCutType {
     DieCut58Dia,
 }
 
+#[allow(dead_code)]
 struct MediaSize {
     mm: f32,
     dots: u32,
 }
 
+#[allow(dead_code)]
 struct Width {
     mm: u8,
     left: u32,
@@ -46,11 +48,13 @@ struct Width {
     right: u32,
 }
 
+#[allow(dead_code)]
 struct Length {
     mm: u8,
     dots: u32,
 }
 
+#[allow(dead_code)]
 pub struct MediaSpec {
     id: u16,
     width: Width,
