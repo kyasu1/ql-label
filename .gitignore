@@ -1,0 +1,5 @@
+/target
+cv_ql800_jpn_raster_101.pdf
+
+# Environment variables - contains sensitive printer serial numbers
+.env

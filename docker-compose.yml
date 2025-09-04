@@ -1,0 +1,21 @@
+version: '3.7'
+
+services:
+  rust-dev:
+    image: rust:latest
+    container_name: rust_dev
+    working_dir: /app
+    volumes:
+      - ./:/app
+      - rust_dev_target:/app/target
+    tty: true
+    environment:
+      USER: appuser
+      CARGO_BUILD_TARGET_DIR: /app/target
+    privileged: true
+    devices:
+      - /dev/usb/lp0:/dev/usb/lp0:rw
+      - /dev/usb/lp1:/dev/usb/lp1:rw
+volumes:
+  rust_dev_target:
+    external: true
