@@ -1,13 +1,13 @@
 [package]
-name = "ptouch"
+name = "ql-label"
 version = "0.2.1"
 authors = ["Yasuyuki Komatsubara <kyasuyako@gmail.com"]
-description = "Rust P-Touch Printer Driver"
+description = "Brother QL series label printer driver for Rust"
 license = "MIT"
-homepage = "https://github.com/kyasu1/ptouch"
-repository = "https://github.com/kyasu1/ptouch.git"
+homepage = "https://github.com/kyasu1/rust-ptouch-usb"
+repository = "https://github.com/kyasu1/rust-ptouch-usb.git"
 readme = "README.md"
-keywords = ["usb", "libusb", "rusb", "ptouch" ]
+keywords = ["brother", "ql", "label", "printer", "usb"]
 edition = "2018"
 
 

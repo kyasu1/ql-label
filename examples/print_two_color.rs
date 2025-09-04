@@ -1,4 +1,4 @@
-use ptouch::{
+use ql_label::{
     convert_rgb_to_two_color, Config, ContinuousType, Media, Model, Printer, TwoColorMatrix,
 };
 use std::env;
@@ -119,7 +119,7 @@ fn main() {
 }
 
 fn create_test_pattern() -> TwoColorMatrix {
-    let width = ptouch::NORMAL_PRINTER_WIDTH;
+    let width = ql_label::NORMAL_PRINTER_WIDTH;
     let height = 300;
     let byte_width = (width + 7) / 8;
 
@@ -166,7 +166,7 @@ fn load_and_convert_image(path: &str) -> Result<TwoColorMatrix, String> {
     println!("Loading image: {}x{} pixels", width, height);
 
     // Resize if needed to fit printer width
-    let target_width = ptouch::NORMAL_PRINTER_WIDTH;
+    let target_width = ql_label::NORMAL_PRINTER_WIDTH;
     let (final_img, final_width, final_height) = if width != target_width {
         let aspect_ratio = height as f32 / width as f32;
         let new_height = (target_width as f32 * aspect_ratio) as u32;

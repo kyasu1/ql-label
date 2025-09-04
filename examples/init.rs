@@ -1,4 +1,4 @@
-use ptouch::{Config, DieCutType, Media, Model, Printer};
+use ql_label::{Config, DieCutType, Media, Model, Printer};
 use std::env;
 
 fn main() {

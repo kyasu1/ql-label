@@ -321,7 +321,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ptouch"
+name = "ql-label"
 version = "0.2.1"
 dependencies = [
  "bitflags",

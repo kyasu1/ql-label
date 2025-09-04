@@ -1,5 +1,5 @@
 use image::{GenericImage, GenericImageView};
-use ptouch::{step_filter_normal, Config, ContinuousType, Matrix, Media, Model, Printer};
+use ql_label::{step_filter_normal, Config, ContinuousType, Matrix, Media, Model, Printer};
 use qrcode::QrCode;
 use std::env;
 
@@ -170,7 +170,7 @@ impl Iterator for Label {
             let (_, length) = image.dimensions();
             let image = image.grayscale();
 
-            let mut buffer = image::DynamicImage::new_luma8(ptouch::NORMAL_PRINTER_WIDTH, length);
+            let mut buffer = image::DynamicImage::new_luma8(ql_label::NORMAL_PRINTER_WIDTH, length);
             buffer.invert();
             buffer.copy_from(&image, 0, 0).unwrap();
             buffer.invert();
@@ -201,7 +201,7 @@ impl Iterator for Label2 {
                 .min_dimensions(100, 200)
                 .build();
 
-            let mut buffer = image::DynamicImage::new_luma8(ptouch::NORMAL_PRINTER_WIDTH, length);
+            let mut buffer = image::DynamicImage::new_luma8(ql_label::NORMAL_PRINTER_WIDTH, length);
             buffer.invert();
             buffer.copy_from(&qrcode, 0, 0).unwrap();
 
