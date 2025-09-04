@@ -15,6 +15,16 @@ This driver supports printing with multiple printers at a same time.
 - [x] Two colors printing support (QL-820NWB).
 - [x] Support multiple printers on one computer.
 
+## Print Samples
+
+Here are some examples of labels printed with this library:
+
+![Print Samples](print-samples.jpg)
+
+The samples show:
+- **Top two labels**: Single-color black printing with Rust logo and various font sizes
+- **Bottom label**: Two-color printing (black and red) demonstrating the library's capabilities on QL-820NWB
+
 ## Usage
 
 ### Media Tape
