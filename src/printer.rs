@@ -6,6 +6,7 @@ use crate::{
     error::{Error, PrinterError},
     media::Media,
     model::Model,
+    utils::TwoColorMatrix,
     Matrix,
 };
 
@@ -393,6 +394,36 @@ impl Printer {
         Ok(())
     }
 
+    /// Print two-color labels
+    ///
+    /// This method prints labels using both black and red colors.
+    /// The config must have two_colors set to true for this to work.
+    pub fn print_two_color(&self, images: impl Iterator<Item = TwoColorMatrix>) -> Result<(), Error> {
+        if !self.config.two_colors {
+            return Err(Error::InvalidConfig("Two-color printing not enabled in config".to_string()));
+        }
+
+        info!("Requesting printer status before two-color print job");
+
+        self.request_status()?;
+
+        match self.read_status() {
+            Ok(status) => {
+                info!("Verifying correct media is installed");
+                status.check_media(self.config.media)?;
+
+                info!("Starting two-color print job");
+                let alternating_images = images.map(|two_color| two_color.to_alternating_matrix());
+                self.print_label(alternating_images)?;
+                Ok(())
+            }
+            Err(err) => {
+                error!("Failed to read printer status: {:?}", err);
+                Err(err)
+            }
+        }
+    }
+
     /// Print labels
     ///
     ///
@@ -476,10 +507,12 @@ impl Printer {
                     if self.config.two_colors {
                         for mut row in image {
                             if color {
+                                // Black raster line (color code 0x01)
                                 buf.append(&mut [0x77, 0x01, 90].to_vec());
                                 buf.append(&mut row);
                                 color = !color;
                             } else {
+                                // Red raster line (color code 0x02)
                                 buf.append(&mut [0x77, 0x02, 90].to_vec());
                                 buf.append(&mut row);
                                 color = !color;
@@ -824,11 +857,12 @@ impl Config {
     ///
     /// # Example
     ///
-    ///
-    /// ```
-    /// let media = Continuous(Continuous29);
-    /// let model = Model:QL800;
-    /// let config = Config::new(model, media);
+    /// ```rust,no_run
+    /// use ptouch::{Config, ContinuousType, Media, Model};
+    /// 
+    /// let media = Media::Continuous(ContinuousType::Continuous29);
+    /// let model = Model::QL800;
+    /// let config = Config::new(model, "serial".to_string(), media);
     /// ```
     ///
     pub fn new(model: Model, serial: String, media: Media) -> Config {

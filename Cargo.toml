@@ -1,6 +1,6 @@
 [package]
 name = "ptouch"
-version = "0.1.2"
+version = "0.2.0"
 authors = ["Yasuyuki Komatsubara <kyasuyako@gmail.com"]
 description = "Rust P-Touch Printer Driver"
 license = "MIT"

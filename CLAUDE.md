@@ -20,11 +20,14 @@ RUST_LOG=debug cargo run --example read_status
 
 # Print test labels (various options available)
 cargo run --example print_rust [normal|high|multiple|qr]
+cargo run --example print_two_color [test|image <path>]
 
 # Examples:
 cargo run --example print_rust normal    # Normal resolution single label
 cargo run --example print_rust multiple  # Multiple high resolution labels
 cargo run --example print_rust qr        # QR code labels
+cargo run --example print_two_color test # Two-color test pattern
+cargo run --example print_two_color image path/to/image.png # Two-color image printing
 ```
 
 ### Testing
@@ -110,6 +113,36 @@ The library handles two main print commands:
 - **0x0C (FF : Print)**: Used for intermediate pages in multi-page jobs
 - **0x1A (Control-Z : Print then Eject)**: Used for final page with media ejection
 - Both commands now use `wait_for_print_completion()` for reliable status monitoring
+
+### Two-Color Printing Support
+
+The library now supports two-color printing (black and red) for compatible QL-820NWB printers:
+
+#### Key Features
+- **TwoColorMatrix**: New data structure for handling black and red image data separately
+- **Automatic Alternating Lines**: Converts two-color data to alternating black/red raster lines
+- **RGB Image Conversion**: Built-in function to convert RGB images to two-color format
+- **Color Detection**: Smart pixel classification (red pixels: R>200,G<100,B<100; black pixels: brightness<128)
+
+#### API Usage
+```rust
+// Enable two-color printing in config
+let config = Config::new(model, serial, media)
+    .two_colors(true);
+
+// Print two-color labels
+let two_color_data = TwoColorMatrix::new(black_matrix, red_matrix)?;
+printer.print_two_color(vec![two_color_data].into_iter())?;
+
+// Convert RGB image to two-color
+let two_color_data = convert_rgb_to_two_color(width, height, &rgb_data)?;
+```
+
+#### Technical Implementation
+- Black raster lines: `0x77 0x01 90` + 90-byte data
+- Red raster lines: `0x77 0x02 90` + 90-byte data
+- Alternating pattern: black line, red line, black line, etc.
+- Raster count = image_height * 2 (due to line doubling)
 
 ## Image Data Format
 

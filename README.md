@@ -12,7 +12,7 @@ This driver supports printing with multiple printers at a same time.
 - [x] Print multiple labels at once.
 - [x] High resolution printing support.
 - [x] Improved print completion handling with smart status monitoring
-- [] Two colors printing support.
+- [x] Two colors printing support (QL-820NWB).
 - [x] Support multiple printers on one computer.
 
 ## Usage
@@ -61,6 +61,18 @@ let config: Config = Config::new(Model::QL800, "000G0Z000000".to_string(), media
 
 These are default settings, `high_resolution` and `two_colors` options work but you need to provide appropriate data.
 
+### Two-Color Printing (QL-820NWB)
+
+For two-color printing with red and black colors, enable the `two_colors` option and use compatible red/black tape:
+
+```rust
+let config: Config = Config::new(Model::QL820NWB, "serial".to_string(), media)
+    .two_colors(true)  // Enable two-color printing
+    .high_resolution(false)
+    .cut_at_end(true)
+    .enable_auto_cut(1);
+```
+
 ### Label Image Data
 
 This part is tricky, since this crate provides only printing capabilities, label data must be prepared with compatible format. As shown in the printer manual, QL series expects image data with a 1bit index bitmap split by lines in an appropriate orders. Please see the manual for more detail.
@@ -80,6 +92,27 @@ let bytes = buffer.to_bytes();
 let bw = ptouch::utils::step_filter_normal(80, length, bytes);
 ```
 
+#### Two-Color Image Data
+
+For two-color printing, you can either:
+
+1. **Convert RGB images automatically**:
+```rust
+let rgb_img = image::open("image.png")?.to_rgb8();
+let (width, height) = rgb_img.dimensions();
+let two_color_data = ptouch::convert_rgb_to_two_color(width, height, rgb_img.as_raw())?;
+```
+
+2. **Create TwoColorMatrix manually**:
+```rust
+let two_color_data = ptouch::TwoColorMatrix::new(black_matrix, red_matrix)?;
+```
+
+The color detection automatically identifies:
+- **Red pixels**: R > 200, G < 100, B < 100
+- **Black pixels**: Brightness < 128 (excluding red pixels)
+- **White pixels**: Everything else (not printed)
+
 #### Tips for creating data
 
 In this crate, the width of image data must be 720px, which is the number of pins the printer have. The length varies depending on the label media. For the DieCut labels, there is a specif value. In case of the Continous labels, you can choose any length between 150px to 11811px for normal resolution (for 300 dpi). If you are specifying high_resolution or two_clolors options, it must be halved. After determing the size, place your contets in the area where actual labels go through. If you are using 62mm media, full width will be printed. But for 29mm media, you need to give an offset of 408 pixel on the left side then place content in 306 pixel width. You can check the details of media specification in the manual.
@@ -88,10 +121,21 @@ In this crate, the width of image data must be 720px, which is the number of pin
 
 Once you get the bitmap data, you can supply them as a Vec.
 
+**Single-color printing**:
 ```rust
 match Printer::new(config) {
     Ok(printer) => {
-		printer.print(vec![bw.clone()]).unwrap();
+        printer.print(vec![bw.clone()]).unwrap();
+    }
+    Err(err) => panic!("Printer Error {}", err),
+}
+```
+
+**Two-color printing**:
+```rust
+match Printer::new(config.two_colors(true)) {
+    Ok(printer) => {
+        printer.print_two_color(vec![two_color_data].into_iter()).unwrap();
     }
     Err(err) => panic!("Printer Error {}", err),
 }
@@ -131,6 +175,20 @@ In the example, there is a small tool to read the printer status.
 RUST_LOG=debug cargo run --example read_status
 ```
 
+### Two-Color Printing Examples
+
+Test two-color printing with built-in test patterns:
+
+```
+RUST_LOG=debug cargo run --example print_two_color test
+```
+
+Print RGB images as two-color labels:
+
+```
+RUST_LOG=debug cargo run --example print_two_color image path/to/your/image.png
+```
+
 This will show something like follows.
 
 ```
@@ -141,6 +199,16 @@ This will show something like follows.
 Some gathered data are saved in `printer_status.txt`.
 
 ## Recent Improvements
+
+### v0.2.0 - Two-Color Printing Support
+
+- **Two-Color Printing**: Full support for red and black printing on QL-820NWB
+- **TwoColorMatrix**: New data structure for handling black and red image data separately
+- **RGB Image Conversion**: Built-in function `convert_rgb_to_two_color` for automatic color separation
+- **Smart Color Detection**: Automatic identification of red (R>200,G<100,B<100) and black (brightness<128) pixels
+- **Print Command Enhancement**: New `print_two_color()` method with alternating raster line processing
+- **Correct Image Orientation**: Fixed pixel ordering to match existing single-color printing behavior
+- **Example Application**: Complete two-color printing example with test patterns and RGB image support
 
 ### v0.1.2 - QL-800 Compression Support Fix
 
@@ -168,7 +236,7 @@ The library now includes enhanced error types for better debugging:
 - [x] Better error handling and reporting for print completion
 - [] Better error handling for when label ends
 - [] Binalization with dithering support
-- [] Binalization with two colors support
+- [x] Two colors printing support
 
 ## Tips
 

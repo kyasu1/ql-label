@@ -2,10 +2,15 @@
 //!
 //! This crate provides a printer driver for Brother P-Touch QL series label printers.
 //!
-//! ```rust
-//! use ptouch;
+//! # Example
 //!
-//! let media
+//! ```rust,no_run
+//! use ptouch::{Config, ContinuousType, Media, Model, Printer};
+//! 
+//! let media = Media::Continuous(ContinuousType::Continuous29);
+//! let model = Model::QL820NWB;
+//! let config = Config::new(model, "serial".to_string(), media);
+//! let printer = Printer::new(config).unwrap();
 //! ```
 
 mod error;
@@ -19,7 +24,7 @@ pub use crate::{
     media::{ContinuousType, DieCutType, Media},
     model::Model,
     printer::{Config, Printer, Status},
-    utils::{step_filter_normal, step_filter_wide},
+    utils::{convert_rgb_to_two_color, step_filter_normal, step_filter_wide, TwoColorMatrix},
 };
 
 pub type Matrix = Vec<Vec<u8>>;
