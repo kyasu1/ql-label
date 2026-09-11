@@ -45,11 +45,11 @@ impl Printer {
     ///
     /// # Example
     /// ```rust,no_run
-    /// # use ptouch::{Config, Model, Media, ContinuousType, Printer};
+    /// # use ql_label::{Config, Model, Media, ContinuousType, Printer};
     /// let config = Config::new(Model::QL820NWB, "E8N117P02180".to_string(), 
     ///                         Media::Continuous(ContinuousType::Continuous62));
     /// let printer = Printer::new(config)?;
-    /// # Ok::<(), ptouch::Error>(())
+    /// # Ok::<(), ql_label::Error>(())
     /// ```
     pub fn new(config: Config) -> Result<Self, Error> {
         // rusb::set_log_level(rusb::LogLevel::Debug);
@@ -124,12 +124,12 @@ impl Printer {
     ///
     /// # Example
     /// ```rust,no_run
-    /// # use ptouch::{Config, Model, Media, ContinuousType, Printer};
+    /// # use ql_label::{Config, Model, Media, ContinuousType, Printer};
     /// # let config = Config::new(Model::QL820NWB, "serial".to_string(), 
     /// #                         Media::Continuous(ContinuousType::Continuous62));
     /// let printer = Printer::new(config)?;
     /// printer.cancel()?; // Cancel any ongoing job
-    /// # Ok::<(), ptouch::Error>(())
+    /// # Ok::<(), ql_label::Error>(())
     /// ```
     pub fn cancel(&self) -> Result<(), Error> {
         let buf = self.initialize();
@@ -148,7 +148,7 @@ impl Printer {
     ///
     /// # Example
     /// ```rust,no_run
-    /// # use ptouch::{Config, Model, Media, ContinuousType, Printer};
+    /// # use ql_label::{Config, Model, Media, ContinuousType, Printer};
     /// # let config = Config::new(Model::QL820NWB, "serial".to_string(), 
     /// #                         Media::Continuous(ContinuousType::Continuous62));
     /// let printer = Printer::new(config)?;
@@ -156,7 +156,7 @@ impl Printer {
     ///     Ok(status) => println!("Printer ready: {:?}", status),
     ///     Err(e) => eprintln!("Printer error: {:?}", e),
     /// }
-    /// # Ok::<(), ptouch::Error>(())
+    /// # Ok::<(), ql_label::Error>(())
     /// ```
     pub fn check_status(&self) -> Result<Status, Error> {
         self.request_status()?;
@@ -182,7 +182,7 @@ impl Printer {
     ///
     /// # Example
     /// ```rust,no_run
-    /// # use ptouch::{Config, Model, Media, ContinuousType, Printer, Matrix};
+    /// # use ql_label::{Config, Model, Media, ContinuousType, Printer, Matrix};
     /// let config = Config::new(Model::QL820NWB, "serial".to_string(), 
     ///                         Media::Continuous(ContinuousType::Continuous62));
     /// let printer = Printer::new(config)?;
@@ -191,7 +191,7 @@ impl Printer {
     /// let image_data: Matrix = vec![vec![0xFF; 90]; 300]; // 300 lines of solid black
     /// 
     /// printer.print(vec![image_data].into_iter())?;
-    /// # Ok::<(), ptouch::Error>(())
+    /// # Ok::<(), ql_label::Error>(())
     /// ```
     pub fn print(&self, images: impl Iterator<Item = Matrix>) -> Result<(), Error> {
         info!("Requesting printer status before print job");
@@ -229,7 +229,7 @@ impl Printer {
     ///
     /// # Example
     /// ```rust,no_run
-    /// # use ptouch::{Config, Model, Media, ContinuousType, Printer, TwoColorMatrix};
+    /// # use ql_label::{Config, Model, Media, ContinuousType, Printer, TwoColorMatrix};
     /// let config = Config::new(Model::QL820NWB, "serial".to_string(), 
     ///                         Media::Continuous(ContinuousType::Continuous62Red))
     ///     .two_colors(true);
@@ -966,7 +966,7 @@ impl Config {
     /// # Example
     ///
     /// ```rust,no_run
-    /// use ptouch::{Config, ContinuousType, Media, Model};
+    /// use ql_label::{Config, ContinuousType, Media, Model};
     /// 
     /// let media = Media::Continuous(ContinuousType::Continuous29);
     /// let model = Model::QL800;
@@ -994,7 +994,7 @@ impl Config {
     ///
     /// # Example
     /// ```rust,no_run
-    /// # use ptouch::{Config, Model, Media, ContinuousType};
+    /// # use ql_label::{Config, Model, Media, ContinuousType};
     /// let config = Config::new(Model::QL820NWB, "serial".to_string(), 
     ///                         Media::Continuous(ContinuousType::Continuous62))
     ///     .enable_auto_cut(3); // Cut after every 3 labels
@@ -1012,7 +1012,7 @@ impl Config {
     ///
     /// # Example
     /// ```rust,no_run
-    /// # use ptouch::{Config, Model, Media, ContinuousType};
+    /// # use ql_label::{Config, Model, Media, ContinuousType};
     /// let config = Config::new(Model::QL820NWB, "serial".to_string(), 
     ///                         Media::Continuous(ContinuousType::Continuous62))
     ///     .disable_auto_cut();
@@ -1031,7 +1031,7 @@ impl Config {
     ///
     /// # Example
     /// ```rust,no_run
-    /// # use ptouch::{Config, Model, Media, ContinuousType};
+    /// # use ql_label::{Config, Model, Media, ContinuousType};
     /// let config = Config::new(Model::QL820NWB, "serial".to_string(), 
     ///                         Media::Continuous(ContinuousType::Continuous62))
     ///     .cut_at_end(true); // Cut at the end of job
@@ -1053,7 +1053,7 @@ impl Config {
     ///
     /// # Example
     /// ```rust,no_run
-    /// # use ptouch::{Config, Model, Media, ContinuousType};
+    /// # use ql_label::{Config, Model, Media, ContinuousType};
     /// let config = Config::new(Model::QL820NWB, "serial".to_string(), 
     ///                         Media::Continuous(ContinuousType::Continuous62))
     ///     .high_resolution(true); // Enable 600 DPI
@@ -1075,7 +1075,7 @@ impl Config {
     ///
     /// # Example
     /// ```rust,no_run
-    /// # use ptouch::{Config, Model, Media, ContinuousType};
+    /// # use ql_label::{Config, Model, Media, ContinuousType};
     /// let config = Config::new(Model::QL820NWB, "serial".to_string(), 
     ///                         Media::Continuous(ContinuousType::Continuous62))
     ///     .set_feed_in_dots(150); // Set feed to 150 dots
@@ -1094,7 +1094,7 @@ impl Config {
     ///
     /// # Example
     /// ```rust,no_run
-    /// # use ptouch::{Config, Model, Media, ContinuousType};
+    /// # use ql_label::{Config, Model, Media, ContinuousType};
     /// let config = Config::new(Model::QL820NWB, "serial".to_string(), 
     ///                         Media::Continuous(ContinuousType::Continuous62Red))
     ///     .two_colors(true); // Enable red and black printing
@@ -1113,7 +1113,7 @@ impl Config {
     ///
     /// # Example
     /// ```rust,no_run
-    /// # use ptouch::{Config, Model, Media, ContinuousType};
+    /// # use ql_label::{Config, Model, Media, ContinuousType};
     /// let config = Config::new(Model::QL820NWB, "serial".to_string(), 
     ///                         Media::Continuous(ContinuousType::Continuous62))
     ///     .compress(true); // Enable compression

@@ -31,7 +31,7 @@ impl TwoColorMatrix {
     ///
     /// # Example
     /// ```rust
-    /// # use ptouch::{TwoColorMatrix, Matrix};
+    /// # use ql_label::{TwoColorMatrix, Matrix};
     /// let black_data: Matrix = vec![vec![0xFF; 90]; 300]; // 300 lines, 90 bytes each
     /// let red_data: Matrix = vec![vec![0x00; 90]; 300];   // Same dimensions
     /// 
@@ -63,7 +63,7 @@ impl TwoColorMatrix {
     ///
     /// # Example
     /// ```rust
-    /// # use ptouch::{TwoColorMatrix, Matrix};
+    /// # use ql_label::{TwoColorMatrix, Matrix};
     /// # let black_data: Matrix = vec![vec![0xFF; 90]; 2];
     /// # let red_data: Matrix = vec![vec![0x00; 90]; 2];
     /// let two_color = TwoColorMatrix::new(black_data, red_data)?;
@@ -99,7 +99,7 @@ impl TwoColorMatrix {
 ///
 /// # Example
 /// ```rust
-/// # use ptouch::{step_filter_normal, Matrix};
+/// # use ql_label::{step_filter_normal, Matrix};
 /// let width = 720;
 /// let height = 100;
 /// let grayscale_data = vec![128u8; (width * height) as usize]; // Gray image
@@ -127,7 +127,7 @@ pub fn step_filter_normal(threshold: u8, length: u32, bytes: Vec<u8>) -> Matrix 
 ///
 /// # Example
 /// ```rust
-/// # use ptouch::{step_filter_wide, Matrix, WIDE_PRINTER_WIDTH};
+/// # use ql_label::{step_filter_wide, Matrix, WIDE_PRINTER_WIDTH};
 /// let width = WIDE_PRINTER_WIDTH;
 /// let height = 100;
 /// let grayscale_data = vec![128u8; (width * height) as usize];
@@ -188,7 +188,7 @@ fn step_filter(threshold: u8, width: u32, length: u32, bytes: Vec<u8>) -> Matrix
 ///
 /// # Example
 /// ```rust
-/// # use ptouch::{convert_rgb_to_two_color};
+/// # use ql_label::{convert_rgb_to_two_color};
 /// let width = 720;
 /// let height = 100;
 /// // Create simple RGB data: red stripe at top, black at bottom
