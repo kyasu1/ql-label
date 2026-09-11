@@ -109,16 +109,12 @@ This part is tricky, since this crate provides only printing capabilities, label
 In this example we create an image data with 720 x 400 px size by using an application. Then using `image` crate to read and convert it to a grayscale data. Then using `step_filter_normal` function, which is supplied with this crate, we binalize and pack bits 90 bytes width vector data.
 
 ```rust
-let file = "examples/rust-logo.png";
+let file = "examples/assets/label-720-300.png";
 let image: image::DynamicImage = image::open(file).unwrap();
 let (_, length) = image.dimensions();
 let gray = image.grayscale();
-let mut buffer = image::DynamicImage::new_luma8(ql_label::WIDE_PRINTER_WIDTH, length);
-buffer.invert();
-buffer.copy_from(&gray, 0, 0).unwrap();
-buffer.invert();
-let bytes = buffer.to_bytes();
-let bw = ql_label::utils::step_filter_normal(80, length, bytes);
+let bytes = gray.to_bytes();
+let bw = ql_label::step_filter_normal(80, length, bytes);
 ```
 
 #### Two-Color Image Data
