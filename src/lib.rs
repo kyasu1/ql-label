@@ -5,7 +5,7 @@
 //! # Example
 //!
 //! ```rust,no_run
-//! use ptouch::{Config, ContinuousType, Media, Model, Printer};
+//! use ql_label::{Config, ContinuousType, Media, Model, Printer};
 //! 
 //! let media = Media::Continuous(ContinuousType::Continuous29);
 //! let model = Model::QL820NWB;
