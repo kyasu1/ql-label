@@ -121,6 +121,12 @@ let bytes = buffer.to_bytes();
 let bw = ql_label::utils::step_filter_normal(80, length, bytes);
 ```
 
+QL printers can only print black or white dots, so a plain threshold loses any shade of gray. For photos, gradients or colored logos use `dither_filter_normal` (or `dither_filter_wide`) instead, which applies Floyd–Steinberg dithering to simulate grays with the density of black dots:
+
+```rust
+let bw = ql_label::dither_filter_normal(length, bytes);
+```
+
 #### Two-Color Image Data
 
 For two-color printing, you can either:

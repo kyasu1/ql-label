@@ -24,7 +24,10 @@ pub use crate::{
     media::{ContinuousType, DieCutType, Media},
     model::Model,
     printer::{Config, Printer, Status},
-    utils::{convert_rgb_to_two_color, step_filter_normal, step_filter_wide, TwoColorMatrix},
+    utils::{
+        convert_rgb_to_two_color, dither_filter_normal, dither_filter_wide, step_filter_normal,
+        step_filter_wide, TwoColorMatrix,
+    },
 };
 
 /// Type alias for 1-bit bitmap data used by printers.
