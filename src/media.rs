@@ -440,7 +440,8 @@ impl Media {
                 50 => Some(Self::Continuous(ContinuousType::Continuous50)),
                 54 => Some(Self::Continuous(ContinuousType::Continuous54)),
                 62 => match c {
-                    0x01 => Some(Self::Continuous(ContinuousType::Continuous62)),
+                    // Older models (e.g. QL-500) do not report the tape color and leave it 0x00
+                    0x00 | 0x01 => Some(Self::Continuous(ContinuousType::Continuous62)),
                     0x81 => Some(Self::Continuous(ContinuousType::Continuous62Red)),
                     _ => None,
                 },

@@ -93,6 +93,7 @@ fn main() {
         "QL820NWB" => Model::QL820NWB,
         "QL800" => Model::QL800,
         "QL720NW" => Model::QL720NW,
+        "QL500" => Model::QL500,
         _ => {
             eprintln!("Unsupported model: {}. Using QL820NWB as default.", model_str);
             Model::QL820NWB

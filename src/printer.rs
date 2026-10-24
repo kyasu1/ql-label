@@ -558,26 +558,31 @@ impl Printer {
 
     fn print_label(&self, images: impl Iterator<Item = Matrix>) -> Result<(), Error> {
         let mut preamble: Vec<u8> = self.initialize();
-        preamble.append(&mut [0x1B, 0x69, 0x61, 0x01].to_vec()); // Set raster command mode
-        preamble.append(&mut [0x1B, 0x69, 0x21, 0x00].to_vec()); // Set auto status notificatoin mode
-                                                                 //
-                                                                 // Apply config values
+        if self.config.model.supports_mode_setting() {
+            preamble.append(&mut [0x1B, 0x69, 0x61, 0x01].to_vec()); // Set raster command mode
+            preamble.append(&mut [0x1B, 0x69, 0x21, 0x00].to_vec()); // Set auto status notificatoin mode
+        }
+
+        // Apply config values
         match self.config.clone().build() {
             Ok(mut buf) => preamble.append(&mut buf),
             Err(err) => return Err(err),
         }
 
-        // QL-800では圧縮モードがサポートされていないため、常に非圧縮とする
-        let use_compression = if matches!(self.config.model, Model::QL800) && self.config.compress {
-            warn!("QL-800 does not support compression mode, using uncompressed mode instead");
+        // QL-800, QL-500では圧縮モードがサポートされていないため、常に非圧縮とする
+        let use_compression = if !self.config.model.supports_compression() && self.config.compress {
+            warn!(
+                "{:?} does not support compression mode, using uncompressed mode instead",
+                self.config.model
+            );
             false
         } else {
             self.config.compress
         };
-        
+
         if use_compression {
             preamble.append(&mut [0x4D, 0x02].to_vec()); // Set to pack bits compression mode
-        } else {
+        } else if self.config.model.supports_compression() {
             preamble.append(&mut [0x4D, 0x00].to_vec()); // Set to no compression mode
         }
 
@@ -1139,7 +1144,7 @@ impl Config {
             }
         }
         // Set auto cut settings
-        {
+        if self.model.has_cutter() {
             let mut various_mode: u8 = 0b0000_0000;
             let mut auto_cut_num: u8 = 1;
 
@@ -1155,7 +1160,7 @@ impl Config {
             buf.append(&mut [0x1B, 0x69, 0x41, auto_cut_num].to_vec()); // ESC i A : Set auto cut number
         }
         // Set expanded mode
-        {
+        if self.model.supports_expanded_mode() {
             let mut expanded_mode: u8 = 0b00000000;
 
             if self.two_colors {
@@ -1173,6 +1178,11 @@ impl Config {
             debug!("Print mode settings: {:#04x}", expanded_mode);
 
             buf.append(&mut [0x1B, 0x69, 0x4B, expanded_mode].to_vec()); // ESC i K : Set expanded mode
+        } else if self.two_colors || self.high_resolution {
+            return Err(Error::InvalidConfig(format!(
+                "{:?} does not support two-color or high resolution printing",
+                self.model
+            )));
         }
         Ok(buf)
     }

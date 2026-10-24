@@ -190,6 +190,7 @@ This improvement reduces unnecessary waiting time and provides better error dete
 
 The following models are tested by myself. 
 
+- QL-500 (no auto cutter, compression, high resolution or two-color printing)
 - QL-720NW
 - QL-800
 - QL-820NWB
