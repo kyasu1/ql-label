@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 #[derive(Debug, Clone, Copy)]
 pub enum Model {
-    QL500,
+    QL500, // TESTED
     QL550,
     QL560,
     QL570,
@@ -30,6 +30,7 @@ impl FromStr for Model {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
+            "QL-500" => Ok(Self::QL500),
             "QL-720NW" => Ok(Self::QL720NW),
             "QL-800" => Ok(Self::QL800),
             "QL-820NW" => Ok(Self::QL820NWB),
@@ -41,6 +42,7 @@ impl FromStr for Model {
 impl Model {
     pub fn from_code(code: u8) -> Self {
         match code {
+            0x4F => Self::QL500, // Also reported by QL-550
             0x47 => Self::QL600,
             0x37 => Self::QL720NW,
             0x38 => Self::QL800,
@@ -55,6 +57,7 @@ impl Model {
 
     pub fn pid(&self) -> u16 {
         match self {
+            Self::QL500 => 0x2015,
             Self::QL600 => 0x20C0,
             Self::QL720NW => 0x2044,
             Self::QL800 => 0x209b,
@@ -76,6 +79,27 @@ impl Model {
             Self::QL1115NWB => crate::WIDE_PRINTER_WIDTH,
             _ => crate::NORMAL_PRINTER_WIDTH,
         }
+    }
+
+    /// Whether the printer has an auto cutter (`ESC i M` / `ESC i A` commands).
+    pub fn has_cutter(&self) -> bool {
+        !matches!(self, Self::QL500)
+    }
+
+    /// Whether the printer accepts `ESC i a` (switch to raster mode) and
+    /// `ESC i !` (automatic status notification). Older models are always in raster mode.
+    pub fn supports_mode_setting(&self) -> bool {
+        !matches!(self, Self::QL500)
+    }
+
+    /// Whether the printer accepts `ESC i K` (expanded mode: cut at end, high resolution, two colors).
+    pub fn supports_expanded_mode(&self) -> bool {
+        !matches!(self, Self::QL500)
+    }
+
+    /// Whether the printer accepts PackBits compressed raster lines (`M 0x02`).
+    pub fn supports_compression(&self) -> bool {
+        !matches!(self, Self::QL500 | Self::QL800)
     }
 
     // pub fn supported_medias(&self) -> Vec<Media> {
