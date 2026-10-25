@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Rust library (`ptouch`) that provides USB printing capability for Brother P-Touch QL series label printers. The crate allows programmatic generation and printing of label images using the rusb library for USB communication.
+This is a Rust library (`ql-label`) that provides USB printing capability for Brother P-Touch QL series label printers. The crate allows programmatic generation and printing of label images using the rusb library for USB communication.
 
 ## Development Commands
 

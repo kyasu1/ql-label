@@ -48,7 +48,7 @@ For two-color printing, the `Config` must be set with:
 ## API Usage
 
 ```rust
-use ptouch::{Config, ContinuousType, Media, Model, Printer, TwoColorMatrix, convert_rgb_to_two_color};
+use ql_label::{Config, ContinuousType, Media, Model, Printer, TwoColorMatrix, convert_rgb_to_two_color};
 
 // Create config with two-color enabled
 let config = Config::new(Model::QL820NWB, "serial".to_string(), media)
