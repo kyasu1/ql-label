@@ -150,5 +150,6 @@ let two_color_data = convert_rgb_to_two_color(width, height, &rgb_data)?;
 Labels must be provided as `Matrix` type (`Vec<Vec<u8>>`):
 - Width: 720px for normal printers, 1296px for wide printers
 - 1-bit bitmap data packed into bytes (8 pixels per byte)
-- Use `step_filter_normal()` utility to convert grayscale images
+- Use `step_filter_normal()` utility to convert grayscale images (threshold)
+- Use `dither_filter_normal()` for photos/gradients (Floyd–Steinberg dithering; printers are 1-bit only)
 - Content positioning depends on media width (see media specifications)
