@@ -14,16 +14,26 @@ This driver supports printing with multiple printers at a same time.
 - [x] Improved print completion handling with smart status monitoring
 - [x] Two colors printing support (QL-820NWB).
 - [x] Support multiple printers on one computer.
+- [x] Floyd–Steinberg dithering for photos and gradients (`dither_filter_normal` / `dither_filter_wide`).
+- [x] Legacy QL-500 support (no cutter, compression, high resolution or two-color printing).
 
 ## Print Samples
 
 Here are some examples of labels printed with this library:
 
-![Print Samples](print-samples.jpg)
+![Print Samples](https://raw.githubusercontent.com/kyasu1/ql-label/main/print-samples.jpg)
 
 The samples show:
 - **Top two labels**: Single-color black printing with Rust logo and various font sizes
 - **Bottom label**: Two-color printing (black and red) demonstrating the library's capabilities on QL-820NWB
+
+### Dithering
+
+QL printers can only print black or white dots, but with Floyd–Steinberg dithering photos and paintings can still be printed with convincing shades of gray. The labels below were printed on a QL-500 (62mm continuous tape) using `dither_filter_normal`:
+
+![Dithering Samples](https://raw.githubusercontent.com/kyasu1/ql-label/main/print-samples-dither.jpg)
+
+Photo courtesy of [@LucentW](https://github.com/LucentW), who contributed both the dithering filters ([#21](https://github.com/kyasu1/ql-label/pull/21)) and QL-500 support ([#20](https://github.com/kyasu1/ql-label/pull/20)).
 
 ## Usage
 
@@ -190,12 +200,14 @@ This improvement reduces unnecessary waiting time and provides better error dete
 
 ## Supported Printers
 
-The following models are tested by myself. 
+The following models are tested on real hardware.
 
-- QL-500 (no auto cutter, compression, high resolution or two-color printing)
+- QL-500 (no auto cutter, compression, high resolution or two-color printing; tested by [@LucentW](https://github.com/LucentW))
 - QL-720NW
 - QL-800
 - QL-820NWB
+
+The QL-500 only has a manual cutter, so auto-cut settings have no effect on it. Requesting high resolution or two-color printing on it returns `InvalidConfig`. Multi-page jobs and die-cut labels are not yet verified on the QL-500.
 
 Another printers listed in the `ql_label::Model` should also work but we might need some tweaking.
 
@@ -232,6 +244,13 @@ Some gathered data are saved in `printer_status.txt`.
 
 ## Recent Improvements
 
+### v0.3.0 - QL-500 Support and Dithering
+
+Both contributed by [@LucentW](https://github.com/LucentW).
+
+- **QL-500 Support** ([#20](https://github.com/kyasu1/ql-label/pull/20)): USB PID `0x2015`, status model code `0x4F` (shared with QL-550), and capability methods `has_cutter()`, `supports_mode_setting()`, `supports_expanded_mode()`, `supports_compression()` that skip commands unsupported by legacy models
+- **Dithering Filters** ([#21](https://github.com/kyasu1/ql-label/pull/21)): `dither_filter_normal` and `dither_filter_wide` apply Floyd–Steinberg error diffusion, taking the same input as `step_filter_*`
+
 ### v0.2.0 - Two-Color Printing Support
 
 - **Two-Color Printing**: Full support for red and black printing on QL-820NWB
@@ -267,7 +286,7 @@ The library now includes enhanced error types for better debugging:
 
 - [x] Better error handling and reporting for print completion
 - [] Better error handling for when label ends
-- [] Binalization with dithering support
+- [x] Binalization with dithering support
 - [x] Two colors printing support
 
 ## Tips

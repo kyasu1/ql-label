@@ -1,12 +1,13 @@
 [package]
 name = "ql-label"
-version = "0.2.1"
-authors = ["Yasuyuki Komatsubara <kyasuyako@gmail.com"]
+version = "0.3.0"
+authors = ["Yasuyuki Komatsubara <kyasuyako@gmail.com>"]
 description = "Brother QL series label printer driver for Rust"
 license = "MIT"
 homepage = "https://github.com/kyasu1/ql-label"
 repository = "https://github.com/kyasu1/ql-label.git"
 readme = "README.md"
+exclude = ["print-samples*.jpg", "BROTHER_QL800_RASTER_SPEC.md", "docker-compose.yml", ".github/", "CLAUDE.md"]
 keywords = ["brother", "ql", "label", "printer", "usb"]
 edition = "2018"
 
